@@ -101,35 +101,43 @@ function profitOf(log, rent) {
   return { booth, profit, perHour: profit / (log.durationMin / 60), margin: profit / log.price };
 }
 
+/* ----------------------------- defaults ---------------------------------- */
+/* Sensible starting values for the editable config/calculator inputs. These
+   are NOT sample data — clients, products and logged services all start empty
+   so each user works entirely from their own real numbers. */
+const DEFAULT_SETTINGS = { boothRentHourly: 12, taxRate: 30 };
+const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 };
+
 /* ================================ APP ==================================== */
 export default function Soli() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("dash");
-  const [settings, setSettings] = useState({ boothRentHourly: 12, taxRate: 30 });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [clients, setClients] = useState([]);
   const [products, setProducts] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [plan, setPlan] = useState({ goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 });
+  const [plan, setPlan] = useState(DEFAULT_PLAN);
 
   useEffect(() => {
     (async () => {
-      const inited = await store.get("soli:init2", false);
+      const inited = await store.get("soli:init3", false);
       if (!inited) {
-        const seed = buildSeed();
-        await store.set("soli:settings", seed.settings);
-        await store.set("soli:clients", seed.clients);
-        await store.set("soli:products", seed.products);
-        await store.set("soli:logs", seed.logs);
-        await store.set("soli:plan", seed.plan);
-        await store.set("soli:init2", true);
-        setSettings(seed.settings); setClients(seed.clients);
-        setProducts(seed.products); setLogs(seed.logs); setPlan(seed.plan);
+        // First run — start with a clean, empty slate so every user enters
+        // their own real numbers rather than inheriting sample data.
+        await store.set("soli:settings", DEFAULT_SETTINGS);
+        await store.set("soli:clients", []);
+        await store.set("soli:products", []);
+        await store.set("soli:logs", []);
+        await store.set("soli:plan", DEFAULT_PLAN);
+        await store.set("soli:init3", true);
+        setSettings(DEFAULT_SETTINGS); setClients([]);
+        setProducts([]); setLogs([]); setPlan(DEFAULT_PLAN);
       } else {
-        setSettings(await store.get("soli:settings", { boothRentHourly: 12, taxRate: 30 }));
+        setSettings(await store.get("soli:settings", DEFAULT_SETTINGS));
         setClients(await store.get("soli:clients", []));
         setProducts(await store.get("soli:products", []));
         setLogs(await store.get("soli:logs", []));
-        setPlan(await store.get("soli:plan", { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 }));
+        setPlan(await store.get("soli:plan", DEFAULT_PLAN));
       }
       setLoading(false);
     })();
@@ -140,6 +148,18 @@ export default function Soli() {
   const saveProducts = (v) => { setProducts(v); store.set("soli:products", v); };
   const saveSettings = (v) => { setSettings(v); store.set("soli:settings", v); };
   const savePlan = (v) => { setPlan(v); store.set("soli:plan", v); };
+
+  // Optional explore/reset tools surfaced in Settings.
+  const loadSample = () => {
+    const seed = buildSeed();
+    saveSettings(seed.settings); saveClients(seed.clients);
+    saveProducts(seed.products); saveLogs(seed.logs); savePlan(seed.plan);
+    setTab("dash");
+  };
+  const clearAll = () => {
+    saveClients([]); saveProducts([]); saveLogs([]);
+    saveSettings(DEFAULT_SETTINGS); savePlan(DEFAULT_PLAN);
+  };
 
   const rent = settings.boothRentHourly;
   const taxRate = settings.taxRate;
@@ -182,7 +202,7 @@ export default function Soli() {
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} />}
-        {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} />}
+        {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll} />}
       </main>
     </div>
   );
@@ -223,6 +243,22 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
     const dueDate = new Date(new Date(c.lastVisit).getTime() + c.rebookWeeks * 7 * 864e5);
     return { ...c, overdue: Math.round((Date.now() - dueDate) / 864e5) };
   }).filter(c => c.overdue >= -3).sort((a, b) => b.overdue - a.overdue);
+
+  if (logs.length === 0) {
+    return (
+      <div className="soli-page">
+        <h1 className="soli-h1">Welcome to Soli</h1>
+        <p className="soli-sub">Your numbers will appear here as soon as you start logging your own work.</p>
+        <div className="soli-empty">
+          <span className="soli-emptymark"><Sun size={26} strokeWidth={1.8} /></span>
+          <h2>No services logged yet</h2>
+          <p>Log your first service and Soli shows your real take-home — after product, booth rent &amp; taxes. Everything here is built from your own numbers.</p>
+          <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log your first service</button>
+        </div>
+        <p className="soli-emptyhint">Just exploring? You can load a sample data set from <b>Settings</b> to see how it all works, then clear it anytime.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="soli-page">
@@ -371,6 +407,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       </Field>
 
       <Field label="Product used (set quantities)">
+        {products.length === 0 && <p className="soli-help">No products yet — add your supplies under <b>Inventory</b> to auto-track product cost. You can still log a service without them.</p>}
         <div className="soli-prodgrid">
           {products.map(p => (
             <div className="soli-prodpick" key={p.id}>
@@ -462,6 +499,7 @@ function ClientsView({ clients, logs, saveClients, rent }) {
     <div className="soli-page">
       <h1 className="soli-h1">Clients</h1>
       <p className="soli-sub">{clients.length} clients · ranked by lifetime profit</p>
+      {clients.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0 }}>No clients yet. They're added automatically when you log a service — just type a new name on the <b>Log service</b> screen.</p>}
       <div className="soli-clientlist">
         {clients.map(c => ({ ...c, s: stats(c.id) })).sort((a, b) => b.s.profit - a.s.profit).map(c => (
           <div key={c.id} className="soli-clientcard" onClick={() => setOpen(open === c.id ? null : c.id)}>
@@ -498,6 +536,7 @@ function Inventory({ products, saveProducts }) {
     <div className="soli-page">
       <h1 className="soli-h1">Inventory & product costs</h1>
       <p className="soli-sub">What each product costs you — Soli uses this in every profit calc.</p>
+      {products.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0, marginBottom: 16 }}>No products yet. Add your supplies below so Soli can fold their cost into every profit calculation.</p>}
       <div className="soli-invtable">
         <div className="soli-invhead"><span>Product</span><span>Cost</span><span>Per</span><span>Stock</span><span></span></div>
         {products.map(p => (
@@ -524,23 +563,29 @@ function Inventory({ products, saveProducts }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings }) {
-  const reset = async () => { if (!confirm("Erase all Soli data and reload the sample set?")) return; await store.set("soli:init2", false); location.reload(); };
+function SettingsView({ settings, saveSettings, loadSample, clearAll }) {
+  const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore — clear it anytime.")) loadSample(); };
+  const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
   return (
     <div className="soli-page soli-narrow">
       <h1 className="soli-h1">Settings</h1>
       <Field label="Booth rent — cost per hour ($)">
         <input className="soli-input" type="number" value={settings.boothRentHourly}
           onChange={e => saveSettings({ ...settings, boothRentHourly: Number(e.target.value) })} />
-        <p className="soli-help">The engine behind every profit number.</p>
+        <p className="soli-help">The engine behind every profit number. Set it to your real chair/booth cost — or 0 if you don't pay rent.</p>
       </Field>
       <Field label="Tax set-aside (%)">
         <input className="soli-input" type="number" value={settings.taxRate}
           onChange={e => saveSettings({ ...settings, taxRate: Number(e.target.value) })} />
         <p className="soli-help">Self-employed? 25–30% is a safe starting point (income + ~15.3% self-employment tax). Ask a tax pro for your exact number.</p>
       </Field>
-      <button className="soli-del big" onClick={reset}><Trash2 size={15} /> Reset to sample data</button>
-      <p className="soli-help">Your data saves automatically and persists between visits.</p>
+
+      <div className="soli-datatools">
+        <div className="soli-datahead">Your data</div>
+        <button className="soli-ghost" onClick={onLoad}>Load sample data to explore</button>
+        <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
+      </div>
+      <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
     </div>
   );
 }
@@ -697,5 +742,18 @@ function Styles() {
 .soli-addbox{background:var(--surface2);border:1px dashed var(--line);border-radius:15px;padding:18px}
 .soli-addhead{font-weight:600;font-size:14px;margin-bottom:12px}
 .soli-help{font-size:12px;color:var(--ink2);margin-top:8px}
+
+.soli-empty{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:42px 28px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.soli-emptymark{width:60px;height:60px;border-radius:50%;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:6px;box-shadow:0 6px 16px rgba(188,107,76,.3)}
+.soli-empty h2{font-family:'Fraunces',serif;font-size:22px;font-weight:600;margin:0}
+.soli-empty p{color:var(--ink2);font-size:14px;margin:0 0 10px;max-width:400px;line-height:1.5}
+.soli-empty .soli-cta{max-width:320px}
+.soli-emptyhint{margin-top:16px;font-size:12.5px;color:var(--ink2);text-align:center;line-height:1.5}
+
+.soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-datahead{font-weight:600;font-size:14px;margin-bottom:2px}
+.soli-ghost{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-family:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:11px;cursor:pointer;transition:.15s}
+.soli-ghost:hover{border-color:var(--clay);color:var(--ink)}
+.soli-datatools .soli-del{width:100%;justify-content:center;padding:12px;margin-top:0}
 `}</style>);
 }
