@@ -1,30 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut
 } from "lucide-react";
-
-/* ----------------------------- storage layer ----------------------------- */
-/* Persists to localStorage in the browser; falls back to in-memory on the
-   server (during SSR) so first render is safe. */
-const mem = {};
-const store = {
-  async get(key, fb) {
-    try {
-      if (typeof window === "undefined") return key in mem ? mem[key] : fb;
-      const r = window.localStorage.getItem(key);
-      return r != null ? JSON.parse(r) : fb;
-    } catch { return fb; }
-  },
-  async set(key, v) {
-    try {
-      if (typeof window === "undefined") { mem[key] = v; return; }
-      window.localStorage.setItem(key, JSON.stringify(v));
-    } catch (e) { console.error(e); }
-  },
-};
+import { createClient } from "@/lib/supabase/client";
+import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
 /* ------------------------------- helpers --------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -110,7 +93,12 @@ const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18
 
 /* ================================ APP ==================================== */
 export default function Soli() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [userId, setUserId] = useState(null);
+  const [email, setEmail] = useState("");
   const [tab, setTab] = useState("dash");
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [clients, setClients] = useState([]);
@@ -120,53 +108,59 @@ export default function Soli() {
 
   useEffect(() => {
     (async () => {
-      const inited = await store.get("soli:init3", false);
-      let s = DEFAULT_SETTINGS, c = [], pr = [], lg = [], pl = DEFAULT_PLAN;
-      if (!inited) {
-        // First run: start with a clean, empty slate so every user enters
-        // their own real numbers rather than inheriting sample data.
-        await store.set("soli:settings", DEFAULT_SETTINGS);
-        await store.set("soli:clients", []);
-        await store.set("soli:products", []);
-        await store.set("soli:logs", []);
-        await store.set("soli:plan", DEFAULT_PLAN);
-        await store.set("soli:init3", true);
-      } else {
-        s = await store.get("soli:settings", DEFAULT_SETTINGS);
-        c = await store.get("soli:clients", []);
-        pr = await store.get("soli:products", []);
-        lg = await store.get("soli:logs", []);
-        pl = await store.get("soli:plan", DEFAULT_PLAN);
-      }
+      try {
+        const { data: { user }, error: authErr } = await supabase.auth.getUser();
+        if (authErr) throw new Error("Auth check failed: " + authErr.message);
+        if (!user) { router.replace("/login"); return; }
+        setUserId(user.id);
+        setEmail(user.email || "");
 
-      // "Try it with sample data" deep-link from the landing page (/app?demo=1).
-      // Seeds at most once, ever, and only when there's no data yet, so it can
-      // never overwrite real work, even if the link is revisited or reloaded.
-      const wantsDemo = typeof window !== "undefined" &&
-        new URLSearchParams(window.location.search).get("demo") === "1";
-      const demoSeeded = await store.get("soli:demoSeeded", false);
-      if (wantsDemo && lg.length === 0 && !demoSeeded) {
-        const seed = buildSeed();
-        s = seed.settings; c = seed.clients; pr = seed.products; lg = seed.logs; pl = seed.plan;
-        await store.set("soli:settings", s); await store.set("soli:clients", c);
-        await store.set("soli:products", pr); await store.set("soli:logs", lg);
-        await store.set("soli:plan", pl);
-        await store.set("soli:demoSeeded", true);
-      }
+        // Load this user's row, creating an empty one on first login.
+        let row = await loadUserState(supabase, user.id);
+        if (!row) {
+          row = await createUserState(supabase, user.id, {
+            settings: DEFAULT_SETTINGS, clients: [], products: [], logs: [], plan: DEFAULT_PLAN, demo_seeded: false,
+          });
+        }
+        let { settings: s, clients: c, products: pr, logs: lg, plan: pl, demo_seeded } = row;
+        s = s || DEFAULT_SETTINGS; c = c || []; pr = pr || []; lg = lg || []; pl = pl || DEFAULT_PLAN;
 
-      setSettings(s); setClients(c); setProducts(pr); setLogs(lg); setPlan(pl);
-      if (wantsDemo && typeof window !== "undefined") {
-        window.history.replaceState({}, "", "/app");
+        // "Try it with sample data" deep-link (/app?demo=1). Seeds at most once,
+        // and only when the account has no data yet, so it never overwrites real work.
+        const wantsDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+        if (wantsDemo && lg.length === 0 && !demo_seeded) {
+          const seed = buildSeed();
+          s = seed.settings; c = seed.clients; pr = seed.products; lg = seed.logs; pl = seed.plan;
+          await saveField(supabase, user.id, "settings", s);
+          await saveField(supabase, user.id, "clients", c);
+          await saveField(supabase, user.id, "products", pr);
+          await saveField(supabase, user.id, "logs", lg);
+          await saveField(supabase, user.id, "plan", pl);
+          await saveField(supabase, user.id, "demo_seeded", true);
+        }
+
+        setSettings(s); setClients(c); setProducts(pr); setLogs(lg); setPlan(pl);
+        if (wantsDemo) window.history.replaceState({}, "", "/app");
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        setLoadError(e?.message || String(e));
+        setLoading(false);
       }
-      setLoading(false);
     })();
-  }, []);
+  }, [supabase, router]);
 
-  const saveLogs = (v) => { setLogs(v); store.set("soli:logs", v); };
-  const saveClients = (v) => { setClients(v); store.set("soli:clients", v); };
-  const saveProducts = (v) => { setProducts(v); store.set("soli:products", v); };
-  const saveSettings = (v) => { setSettings(v); store.set("soli:settings", v); };
-  const savePlan = (v) => { setPlan(v); store.set("soli:plan", v); };
+  const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
+  const saveClients = (v) => { setClients(v); if (userId) saveField(supabase, userId, "clients", v); };
+  const saveProducts = (v) => { setProducts(v); if (userId) saveField(supabase, userId, "products", v); };
+  const saveSettings = (v) => { setSettings(v); if (userId) saveField(supabase, userId, "settings", v); };
+  const savePlan = (v) => { setPlan(v); if (userId) saveField(supabase, userId, "plan", v); };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  };
 
   // Optional explore/reset tools surfaced in Settings.
   const loadSample = () => {
@@ -192,6 +186,18 @@ export default function Soli() {
     { id: "settings", label: "Settings", Icon: SettingsIcon },
   ];
 
+  if (loadError) return (
+    <div className="soli-root soli-center"><Styles />
+      <div style={{ maxWidth: 460, textAlign: "center", padding: 24 }}>
+        <div className="soli-loadmark" style={{ margin: "0 auto 16px", animation: "none", background: "var(--clay-d)" }}><AlertTriangle size={24} /></div>
+        <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22, margin: "0 0 8px" }}>We couldn't load your data</h2>
+        <p style={{ color: "var(--ink2)", fontSize: 14, margin: "0 0 16px" }}>{loadError}</p>
+        <button className="soli-cta" style={{ maxWidth: 260, margin: "0 auto" }} onClick={() => location.reload()}>Try again</button>
+        <button className="soli-navbtn soli-signout" style={{ margin: "12px auto 0" }} onClick={signOut}><LogOut size={16} /> Sign out</button>
+      </div>
+    </div>
+  );
+
   if (loading) return (
     <div className="soli-root soli-center"><Styles /><div className="soli-loadmark"><Sun size={26} strokeWidth={1.6} /></div></div>
   );
@@ -211,6 +217,9 @@ export default function Soli() {
               <Icon size={16} strokeWidth={1.9} /><span>{label}</span>
             </button>
           ))}
+          <button onClick={signOut} className="soli-navbtn soli-signout" title={email ? `Signed in as ${email}` : "Sign out"}>
+            <LogOut size={16} strokeWidth={1.9} /><span>Sign out</span>
+          </button>
         </nav>
       </header>
 
@@ -630,6 +639,8 @@ function Styles() {
 .soli-navbtn{display:flex;align-items:center;gap:7px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13.5px;color:var(--ink2);padding:8px 13px;border-radius:9px;transition:.15s}
 .soli-navbtn:hover{background:var(--surface2);color:var(--ink)}
 .soli-navbtn.active{background:var(--ink);color:var(--bg)}
+.soli-signout{margin-left:6px;border-left:1px solid var(--line);border-radius:0 9px 9px 0;color:var(--clay-d)}
+.soli-signout:hover{background:#F6E5DA;color:var(--clay-d)}
 .soli-main{max-width:920px;margin:0 auto;padding:30px 22px 80px}
 .soli-page{animation:rise .4s ease both}
 .soli-narrow{max-width:560px;margin:0 auto}
