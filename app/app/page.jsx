@@ -105,6 +105,9 @@ export default function Soli() {
   const [products, setProducts] = useState([]);
   const [logs, setLogs] = useState([]);
   const [plan, setPlan] = useState(DEFAULT_PLAN);
+  const [trialEndsAt, setTrialEndsAt] = useState(null);
+  const [subStatus, setSubStatus] = useState(null);
+  const [billingBusy, setBillingBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -115,19 +118,22 @@ export default function Soli() {
         setUserId(user.id);
         setEmail(user.email || "");
 
-        // Load this user's row, creating an empty one on first login.
+        // Load this user's row, creating an empty one (with a 14-day trial) on first login.
         let row = await loadUserState(supabase, user.id);
         if (!row) {
           row = await createUserState(supabase, user.id, {
-            settings: DEFAULT_SETTINGS, clients: [], products: [], logs: [], plan: DEFAULT_PLAN, demo_seeded: false,
+            settings: DEFAULT_SETTINGS, clients: [], products: [], logs: [], plan: DEFAULT_PLAN,
+            demo_seeded: false, trial_ends_at: new Date(Date.now() + 14 * 864e5).toISOString(),
           });
         }
-        let { settings: s, clients: c, products: pr, logs: lg, plan: pl, demo_seeded } = row;
+        let { settings: s, clients: c, products: pr, logs: lg, plan: pl, demo_seeded,
+          trial_ends_at: trialEnd, subscription_status: sub } = row;
         s = s || DEFAULT_SETTINGS; c = c || []; pr = pr || []; lg = lg || []; pl = pl || DEFAULT_PLAN;
 
         // "Try it with sample data" deep-link (/app?demo=1). Seeds at most once,
         // and only when the account has no data yet, so it never overwrites real work.
-        const wantsDemo = new URLSearchParams(window.location.search).get("demo") === "1";
+        const params = new URLSearchParams(window.location.search);
+        const wantsDemo = params.get("demo") === "1";
         if (wantsDemo && lg.length === 0 && !demo_seeded) {
           const seed = buildSeed();
           s = seed.settings; c = seed.clients; pr = seed.products; lg = seed.logs; pl = seed.plan;
@@ -139,8 +145,19 @@ export default function Soli() {
           await saveField(supabase, user.id, "demo_seeded", true);
         }
 
+        // Returning from Stripe Checkout: the webhook may lag a beat, so re-check
+        // the subscription a few times before giving up.
+        if (params.get("upgraded") === "1") {
+          for (let i = 0; i < 4 && !(sub === "active" || sub === "trialing"); i++) {
+            await new Promise((r) => setTimeout(r, 1800));
+            const fresh = await loadUserState(supabase, user.id);
+            if (fresh) { sub = fresh.subscription_status; trialEnd = fresh.trial_ends_at; }
+          }
+        }
+
         setSettings(s); setClients(c); setProducts(pr); setLogs(lg); setPlan(pl);
-        if (wantsDemo) window.history.replaceState({}, "", "/app");
+        setTrialEndsAt(trialEnd); setSubStatus(sub);
+        if (wantsDemo || params.get("upgraded") === "1") window.history.replaceState({}, "", "/app");
         setLoading(false);
       } catch (e) {
         console.error(e);
@@ -149,6 +166,27 @@ export default function Soli() {
       }
     })();
   }, [supabase, router]);
+
+  const goCheckout = async () => {
+    setBillingBusy(true);
+    try {
+      const res = await fetch("/api/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      alert(data.error || "Could not start checkout.");
+    } catch { alert("Could not start checkout."); }
+    setBillingBusy(false);
+  };
+  const goPortal = async () => {
+    setBillingBusy(true);
+    try {
+      const res = await fetch("/api/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      alert(data.error || "Could not open billing.");
+    } catch { alert("Could not open billing."); }
+    setBillingBusy(false);
+  };
 
   const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
   const saveClients = (v) => { setClients(v); if (userId) saveField(supabase, userId, "clients", v); };
@@ -177,6 +215,13 @@ export default function Soli() {
   const rent = settings.boothRentHourly;
   const taxRate = settings.taxRate;
 
+  // Access: active subscription, or still inside the 14-day free trial.
+  const isSubscribed = subStatus === "active" || subStatus === "trialing";
+  const msLeft = trialEndsAt ? new Date(trialEndsAt).getTime() - Date.now() : 0;
+  const inTrial = msLeft > 0;
+  const trialDaysLeft = Math.max(0, Math.ceil(msLeft / 864e5));
+  const hasAccess = isSubscribed || inTrial;
+
   const nav = [
     { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
     { id: "log", label: "Log service", Icon: PlusCircle },
@@ -202,6 +247,8 @@ export default function Soli() {
     <div className="soli-root soli-center"><Styles /><div className="soli-loadmark"><Sun size={26} strokeWidth={1.6} /></div></div>
   );
 
+  if (!hasAccess) return <Paywall email={email} onSubscribe={goCheckout} onSignOut={signOut} busy={billingBusy} />;
+
   return (
     <div className="soli-root">
       <Styles />
@@ -224,13 +271,20 @@ export default function Soli() {
       </header>
 
       <main className="soli-main">
+        {!isSubscribed && inTrial && (
+          <div className="soli-trialbar">
+            <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in your free trial</span>
+            <button onClick={goCheckout} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe — $12/mo"}</button>
+          </div>
+        )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} />}
-        {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll} />}
+        {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
+          isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email} />}
       </main>
     </div>
   );
@@ -591,12 +645,34 @@ function Inventory({ products, saveProducts }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email }) {
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
   return (
     <div className="soli-page soli-narrow">
       <h1 className="soli-h1">Settings</h1>
+
+      <div className="soli-billing">
+        <div className="soli-datahead">Your plan</div>
+        {isSubscribed ? (
+          <>
+            <div className="soli-planline"><span className="soli-planbadge on">Soli Pro</span><span>Active — $12/mo</span></div>
+            <p className="soli-help">Thanks for subscribing. Manage your card, invoices, or cancel anytime.</p>
+            <button className="soli-ghost" onClick={onManage} disabled={billingBusy}>{billingBusy ? "One moment…" : "Manage billing"}</button>
+          </>
+        ) : (
+          <>
+            <div className="soli-planline">
+              <span className="soli-planbadge">Free trial</span>
+              <span>{inTrial ? `${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left` : "Trial ended"}</span>
+            </div>
+            <p className="soli-help">Keep your numbers, tax jar, and profit tracking going for $12/mo after your trial.</p>
+            <button className="soli-cta sm" onClick={onSubscribe} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe — $12/mo"}</button>
+          </>
+        )}
+        {email && <p className="soli-help">Signed in as {email}</p>}
+      </div>
+
       <Field label="Booth rent, cost per hour ($)">
         <input className="soli-input" type="number" value={settings.boothRentHourly}
           onChange={e => saveSettings({ ...settings, boothRentHourly: Number(e.target.value) })} />
@@ -614,6 +690,25 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll }) {
         <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
       </div>
       <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
+    </div>
+  );
+}
+
+/* ------------------------------- PAYWALL --------------------------------- */
+function Paywall({ email, onSubscribe, onSignOut, busy }) {
+  return (
+    <div className="soli-root soli-center">
+      <Styles />
+      <div className="soli-paywall">
+        <span className="soli-logomark" style={{ width: 56, height: 56 }}><Sun size={26} strokeWidth={1.8} /></span>
+        <h1>Your free trial has ended</h1>
+        <p>Subscribe to keep your real take-home, tax jar, profit-per-hour, and every client and number you've logged.</p>
+        <div className="soli-payprice"><b>$12</b> / month</div>
+        <button className="soli-cta" onClick={onSubscribe} disabled={busy}>{busy ? "One moment…" : "Subscribe & keep going"}</button>
+        <p className="soli-paynote">Your data is safe and waiting — subscribing brings it right back.</p>
+        <button className="soli-navbtn soli-signout" style={{ margin: "6px auto 0" }} onClick={onSignOut}><LogOut size={16} /> Sign out</button>
+        {email && <p className="soli-paynote">Signed in as {email}</p>}
+      </div>
     </div>
   );
 }
@@ -785,5 +880,26 @@ function Styles() {
 .soli-ghost{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-family:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-ghost:hover{border-color:var(--clay);color:var(--ink)}
 .soli-datatools .soli-del{width:100%;justify-content:center;padding:12px;margin-top:0}
+
+.soli-trialbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:20px;font-size:13.5px;font-weight:500}
+.soli-trialbar span{display:inline-flex;align-items:center;gap:7px}
+.soli-trialbar button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:#fff;color:var(--clay-d);padding:8px 14px;border-radius:9px;transition:.15s}
+.soli-trialbar button:hover{background:#FFF4E9}
+.soli-trialbar button:disabled{opacity:.6;cursor:not-allowed}
+
+.soli-billing{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:22px}
+.soli-planline{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:600;margin-bottom:4px}
+.soli-planbadge{font-size:11.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:4px 10px;border-radius:20px;background:#E4E8D6;color:var(--sage-d)}
+.soli-planbadge.on{background:var(--profit);color:#fff}
+.soli-billing .soli-cta,.soli-billing .soli-ghost{margin-top:10px}
+
+.soli-paywall{max-width:440px;text-align:center;padding:28px 26px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.soli-paywall .soli-logomark{margin-bottom:10px}
+.soli-paywall h1{font-family:'Fraunces',serif;font-size:27px;font-weight:600;margin:0 0 4px;letter-spacing:-.5px}
+.soli-paywall p{color:var(--ink2);font-size:14.5px;margin:0 0 6px;line-height:1.5}
+.soli-payprice{font-family:'Fraunces',serif;font-size:20px;color:var(--ink);margin:8px 0 6px}
+.soli-payprice b{font-size:32px;color:var(--clay-d)}
+.soli-paywall .soli-cta{max-width:320px}
+.soli-paynote{font-size:12.5px;color:var(--ink2);margin-top:10px}
 `}</style>);
 }
