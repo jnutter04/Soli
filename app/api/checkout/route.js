@@ -18,6 +18,18 @@ export async function POST(request) {
       .maybeSingle();
 
     let customerId = row?.stripe_customer_id;
+
+    // If we have a stored customer, make sure it still exists in THIS Stripe mode.
+    // (A customer created in test/sandbox won't exist under a live key, and vice versa.)
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if (existing?.deleted) customerId = null;
+      } catch {
+        customerId = null; // stale or wrong-mode id, fall through and make a fresh one
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,

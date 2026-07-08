@@ -215,12 +215,13 @@ export default function Soli() {
   const rent = settings.boothRentHourly;
   const taxRate = settings.taxRate;
 
-  // Access: active subscription, or still inside the 14-day free trial.
+  // Access: active subscription, a payment-retry grace period, or the free trial.
   const isSubscribed = subStatus === "active" || subStatus === "trialing";
+  const inGrace = subStatus === "past_due"; // renewal failed; Stripe is retrying, keep access and nudge to fix
   const msLeft = trialEndsAt ? new Date(trialEndsAt).getTime() - Date.now() : 0;
   const inTrial = msLeft > 0;
   const trialDaysLeft = Math.max(0, Math.ceil(msLeft / 864e5));
-  const hasAccess = isSubscribed || inTrial;
+  const hasAccess = isSubscribed || inGrace || inTrial;
 
   const nav = [
     { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
@@ -271,10 +272,16 @@ export default function Soli() {
       </header>
 
       <main className="soli-main">
-        {!isSubscribed && inTrial && (
+        {!isSubscribed && !inGrace && inTrial && (
           <div className="soli-trialbar">
             <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in your free trial</span>
-            <button onClick={goCheckout} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe — $12/mo"}</button>
+            <button onClick={goCheckout} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
+          </div>
+        )}
+        {inGrace && (
+          <div className="soli-trialbar grace">
+            <span><AlertTriangle size={14} strokeWidth={2} /> There's a problem with your last payment. Update your card to keep Soli Pro.</span>
+            <button onClick={goPortal} disabled={billingBusy}>{billingBusy ? "One moment…" : "Update payment"}</button>
           </div>
         )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} />}
@@ -570,12 +577,25 @@ function Planner({ plan, savePlan, taxRate }) {
 /* ------------------------------- CLIENTS --------------------------------- */
 function ClientsView({ clients, logs, saveClients, rent }) {
   const [open, setOpen] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", phone: "", notes: "", rebookWeeks: 4 });
   const stats = (cid) => {
     const ls = logs.filter(l => l.clientId === cid);
     const profit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0);
     return { visits: ls.length, profit, ls: ls.sort((a, b) => new Date(b.date) - new Date(a.date)) };
   };
   const remove = (id) => { saveClients(clients.filter(c => c.id !== id)); setOpen(null); };
+  const startEdit = (c) => { setEditing(c.id); setForm({ name: c.name, phone: c.phone || "", notes: c.notes || "", rebookWeeks: c.rebookWeeks || 4 }); };
+  const saveEdit = (id) => {
+    saveClients(clients.map(c => c.id === id ? {
+      ...c,
+      name: form.name.trim() || c.name,
+      phone: form.phone.trim(),
+      notes: form.notes.trim(),
+      rebookWeeks: Math.max(1, Number(form.rebookWeeks) || 4),
+    } : c));
+    setEditing(null);
+  };
 
   return (
     <div className="soli-page">
@@ -591,14 +611,35 @@ function ClientsView({ clients, logs, saveClients, rent }) {
             </div>
             {open === c.id && (
               <div className="soli-clientdetail" onClick={e => e.stopPropagation()}>
-                {c.notes && <p className="soli-clientnotes">{c.notes}</p>}
-                {c.phone && <p className="soli-clientnotes">📞 {c.phone}</p>}
-                <div className="soli-history">
-                  {c.s.ls.map(l => (
-                    <div className="soli-histrow" key={l.id}><span>{fmtDate(l.date)} · {l.service} <em>· {srcLabel(l.paySource)}</em></span><span className="soli-histprofit">{money2(profitOf(l, rent).profit)}</span></div>
-                  ))}
-                </div>
-                <button className="soli-del" onClick={() => remove(c.id)}><Trash2 size={14} /> Remove client</button>
+                {editing === c.id ? (
+                  <div>
+                    <div className="soli-row2">
+                      <Field label="Name"><input className="soli-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
+                      <Field label="Phone"><input className="soli-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555-0100" /></Field>
+                    </div>
+                    <Field label="Notes"><input className="soli-input" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Preferences, reminders" /></Field>
+                    <Field label="Rebook every (weeks)"><input className="soli-input" type="number" min="1" value={form.rebookWeeks} onChange={e => setForm({ ...form, rebookWeeks: e.target.value })} /></Field>
+                    <div className="soli-editactions">
+                      <button className="soli-cta sm" onClick={() => saveEdit(c.id)}>Save changes</button>
+                      <button className="soli-editbtn" onClick={() => setEditing(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {c.notes && <p className="soli-clientnotes">{c.notes}</p>}
+                    {c.phone && <p className="soli-clientnotes">📞 {c.phone}</p>}
+                    <p className="soli-clientnotes">↻ Rebook every {c.rebookWeeks || 4} weeks</p>
+                    <div className="soli-history">
+                      {c.s.ls.map(l => (
+                        <div className="soli-histrow" key={l.id}><span>{fmtDate(l.date)} · {l.service} <em>· {srcLabel(l.paySource)}</em></span><span className="soli-histprofit">{money2(profitOf(l, rent).profit)}</span></div>
+                      ))}
+                    </div>
+                    <div className="soli-editactions">
+                      <button className="soli-editbtn" onClick={() => startEdit(c)}>Edit client</button>
+                      <button className="soli-del" onClick={() => remove(c.id)}><Trash2 size={14} /> Remove</button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -656,7 +697,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <div className="soli-datahead">Your plan</div>
         {isSubscribed ? (
           <>
-            <div className="soli-planline"><span className="soli-planbadge on">Soli Pro</span><span>Active — $12/mo</span></div>
+            <div className="soli-planline"><span className="soli-planbadge on">Soli Pro</span><span>Active · $12/mo</span></div>
             <p className="soli-help">Thanks for subscribing. Manage your card, invoices, or cancel anytime.</p>
             <button className="soli-ghost" onClick={onManage} disabled={billingBusy}>{billingBusy ? "One moment…" : "Manage billing"}</button>
           </>
@@ -667,7 +708,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
               <span>{inTrial ? `${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left` : "Trial ended"}</span>
             </div>
             <p className="soli-help">Keep your numbers, tax jar, and profit tracking going for $12/mo after your trial.</p>
-            <button className="soli-cta sm" onClick={onSubscribe} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe — $12/mo"}</button>
+            <button className="soli-cta sm" onClick={onSubscribe} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
           </>
         )}
         {email && <p className="soli-help">Signed in as {email}</p>}
@@ -705,7 +746,7 @@ function Paywall({ email, onSubscribe, onSignOut, busy }) {
         <p>Subscribe to keep your real take-home, tax jar, profit-per-hour, and every client and number you've logged.</p>
         <div className="soli-payprice"><b>$12</b> / month</div>
         <button className="soli-cta" onClick={onSubscribe} disabled={busy}>{busy ? "One moment…" : "Subscribe & keep going"}</button>
-        <p className="soli-paynote">Your data is safe and waiting — subscribing brings it right back.</p>
+        <p className="soli-paynote">Your data is safe and waiting. Subscribing brings it right back.</p>
         <button className="soli-navbtn soli-signout" style={{ margin: "6px auto 0" }} onClick={onSignOut}><LogOut size={16} /> Sign out</button>
         {email && <p className="soli-paynote">Signed in as {email}</p>}
       </div>
@@ -857,6 +898,11 @@ function Styles() {
 .soli-histprofit{color:var(--profit);font-weight:600}
 .soli-del{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid #E8C4B0;color:var(--clay-d);font-family:inherit;font-size:12.5px;padding:7px 12px;border-radius:9px;cursor:pointer;margin-top:8px}
 .soli-del.big{margin-top:24px;width:100%;justify-content:center;padding:12px}
+.soli-editactions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.soli-editactions .soli-cta{width:auto;margin-top:0}
+.soli-editactions .soli-del{margin-top:0}
+.soli-editbtn{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);color:var(--ink2);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;transition:.15s}
+.soli-editbtn:hover{border-color:var(--clay);color:var(--ink)}
 
 .soli-invtable{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:8px 12px;margin-bottom:20px;overflow-x:auto}
 .soli-invhead,.soli-invrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:430px}
@@ -886,6 +932,8 @@ function Styles() {
 .soli-trialbar button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:#fff;color:var(--clay-d);padding:8px 14px;border-radius:9px;transition:.15s}
 .soli-trialbar button:hover{background:#FFF4E9}
 .soli-trialbar button:disabled{opacity:.6;cursor:not-allowed}
+.soli-trialbar.grace{background:linear-gradient(150deg,#BC6B4C,#A4583B)}
+.soli-trialbar.grace button{color:var(--clay-d)}
 
 .soli-billing{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:22px}
 .soli-planline{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:600;margin-bottom:4px}
