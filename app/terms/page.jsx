@@ -83,12 +83,12 @@ export default function TermsPage() {
 
       <h2>Governing law</h2>
       <p>
-        These Terms are governed by the laws of your place of business, without regard to conflict-of-law
-        rules. [Replace with your state or country before launch.]
+        These Terms are governed by the laws of the State of Ohio, United States, without regard to its
+        conflict-of-law rules.
       </p>
 
       <h2>Contact</h2>
-      <p>Questions about these Terms? Contact us at <a href="mailto:hello@soli.beauty">hello@soli.beauty</a>.</p>
+      <p>Questions about these Terms? Contact us at <a href="mailto:jnutter04@gmail.com">jnutter04@gmail.com</a>.</p>
     </LegalShell>
   );
 }

@@ -64,7 +64,7 @@ export default function PrivacyPage() {
       <p>We may update this policy from time to time. The date at the top shows when it was last changed.</p>
 
       <h2>Contact</h2>
-      <p>Questions about this policy? Contact us at <a href="mailto:hello@soli.beauty">hello@soli.beauty</a>.</p>
+      <p>Questions about this policy? Contact us at <a href="mailto:jnutter04@gmail.com">jnutter04@gmail.com</a>.</p>
     </LegalShell>
   );
 }
