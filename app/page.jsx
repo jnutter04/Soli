@@ -146,6 +146,8 @@ export default function Landing() {
           <span className="lp-word sm">Soli</span>
         </div>
         <span className="lp-foot-tag">Know what you actually keep.</span>
+        <Link href="/privacy" className="lp-foot-link">Privacy</Link>
+        <Link href="/terms" className="lp-foot-link">Terms</Link>
         <Link href="/app" className="lp-foot-link">Open the app →</Link>
       </footer>
     </div>
