@@ -7,9 +7,10 @@ export const runtime = "nodejs";
 // Reflect a Stripe subscription onto the user's row (by Stripe customer id).
 async function syncSubscription(admin, sub) {
   const status = sub.status; // active, trialing, past_due, canceled, ...
-  const periodEnd = sub.current_period_end
-    ? new Date(sub.current_period_end * 1000).toISOString()
-    : null;
+  // current_period_end lives on the subscription in older API versions and on the
+  // line item in newer ones; read whichever is present.
+  const rawPeriodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+  const periodEnd = rawPeriodEnd ? new Date(rawPeriodEnd * 1000).toISOString() : null;
   await admin
     .from("user_state")
     .update({ subscription_status: status, current_period_end: periodEnd })

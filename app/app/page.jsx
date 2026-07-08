@@ -344,6 +344,10 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
           <p>Log your first service and Soli shows your real take-home, after product, booth rent &amp; taxes. Everything here is built from your own numbers.</p>
           <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log your first service</button>
         </div>
+        <div className="soli-setuptip">
+          <span><SettingsIcon size={15} strokeWidth={1.9} /> First, set your <b>booth rent</b> &amp; <b>tax rate</b> so every number is truly yours.</span>
+          <button onClick={() => setTab("settings")}>Open Settings</button>
+        </div>
         <p className="soli-emptyhint">Just exploring? You can load a sample data set from <b>Settings</b> to see how it all works, then clear it anytime.</p>
       </div>
     );
@@ -419,7 +423,10 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
         {due.map(c => (
           <div className="soli-duerow" key={c.id}>
             <div><div className="soli-duename">{c.name}</div><div className="soli-duemeta">last {fmtDate(c.lastVisit)} · every {c.rebookWeeks}w</div></div>
-            <span className={"soli-pill " + (c.overdue > 0 ? "late" : "soon")}>{c.overdue > 0 ? c.overdue + "d overdue" : "due soon"}</span>
+            <div className="soli-dueactions">
+              <span className={"soli-pill " + (c.overdue > 0 ? "late" : "soon")}>{c.overdue > 0 ? c.overdue + "d overdue" : "due soon"}</span>
+              {c.phone && <a className="soli-textlink" href={"sms:" + c.phone.replace(/[^0-9+]/g, "")}>Text</a>}
+            </div>
           </div>
         ))}
       </section>
@@ -627,7 +634,12 @@ function ClientsView({ clients, logs, saveClients, rent }) {
                 ) : (
                   <>
                     {c.notes && <p className="soli-clientnotes">{c.notes}</p>}
-                    {c.phone && <p className="soli-clientnotes">📞 {c.phone}</p>}
+                    {c.phone && (
+                      <p className="soli-clientnotes soli-contactrow">
+                        <a href={"tel:" + c.phone.replace(/[^0-9+]/g, "")}>📞 {c.phone}</a>
+                        <a className="soli-textlink" href={"sms:" + c.phone.replace(/[^0-9+]/g, "")}>Text</a>
+                      </p>
+                    )}
                     <p className="soli-clientnotes">↻ Rebook every {c.rebookWeeks || 4} weeks</p>
                     <div className="soli-history">
                       {c.s.ls.map(l => (
@@ -828,6 +840,12 @@ function Styles() {
 
 .soli-duerow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .soli-duerow:first-of-type{border-top:none}
+.soli-dueactions{display:flex;align-items:center;gap:9px}
+.soli-textlink{display:inline-flex;align-items:center;font-size:12.5px;font-weight:600;color:#fff;background:var(--sage-d);padding:5px 12px;border-radius:20px;text-decoration:none;transition:.15s}
+.soli-textlink:hover{background:#4a5539}
+.soli-contactrow{display:flex;align-items:center;gap:12px}
+.soli-contactrow a:first-child{color:var(--clay-d);text-decoration:none;font-weight:500}
+.soli-contactrow a:first-child:hover{text-decoration:underline}
 .soli-duename{font-weight:600;font-size:14.5px}.soli-duemeta{font-size:12.5px;color:var(--ink2)}
 .soli-pill{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:20px}
 .soli-pill.late{background:#F3DACE;color:var(--clay-d)}.soli-pill.soon{background:#E4E8D6;color:var(--sage-d)}
@@ -920,6 +938,11 @@ function Styles() {
 .soli-empty p{color:var(--ink2);font-size:14px;margin:0 0 10px;max-width:400px;line-height:1.5}
 .soli-empty .soli-cta{max-width:320px}
 .soli-emptyhint{margin-top:16px;font-size:12.5px;color:var(--ink2);text-align:center;line-height:1.5}
+.soli-setuptip{margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--line);border-radius:13px;padding:13px 16px;font-size:13.5px;color:var(--ink)}
+.soli-setuptip span{display:inline-flex;align-items:center;gap:8px;color:var(--ink2)}
+.soli-setuptip b{color:var(--ink)}
+.soli-setuptip button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;white-space:nowrap}
+.soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .soli-datahead{font-weight:600;font-size:14px;margin-bottom:2px}

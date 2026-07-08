@@ -117,16 +117,22 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* TESTIMONIALS (PLACEHOLDER): replace with real, opt-in quotes before relying on these */}
+      {/* Honest value cards (real testimonials can replace these once collected) */}
       <section className="lp-quotes">
         <h2 className="lp-h2 center">Built for the chair, not the spreadsheet</h2>
         <div className="lp-quote-grid">
-          <Quote text="I thought I had a good month. Soli showed me what I actually kept after rent and supplies, and what to charge to fix it."
-            name="Placeholder: add a real testimonial" role="Lash artist" />
-          <Quote text="Half my income is Venmo. My booking app pretended it didn't exist. This finally counts all of it."
-            name="Placeholder: add a real testimonial" role="Brow &amp; lamination" />
-          <Quote text="The tax jar alone is worth it. I stopped getting wrecked every spring."
-            name="Placeholder: add a real testimonial" role="Esthetician" />
+          <div className="lp-quote">
+            <div className="lp-qtitle">Your real take-home</div>
+            <p className="lp-qbody">"A good month" means nothing until product, booth rent, and taxes come out. Soli does that math on every service, automatically.</p>
+          </div>
+          <div className="lp-quote">
+            <div className="lp-qtitle">Every dollar counted</div>
+            <p className="lp-qbody">Cash, Venmo, and Zelle are real income your card-only reports ignore. Soli counts all of it, so your numbers are complete.</p>
+          </div>
+          <div className="lp-quote">
+            <div className="lp-qtitle">No more April surprises</div>
+            <p className="lp-qbody">A tax jar sets money aside from every service, so tax time is money you already saved, not a shock.</p>
+          </div>
         </div>
       </section>
 
@@ -171,15 +177,6 @@ function Step({ n, title, body }) {
       <h3>{title}</h3>
       <p>{body}</p>
     </div>
-  );
-}
-
-function Quote({ text, name, role }) {
-  return (
-    <figure className="lp-quote">
-      <blockquote>“{text}”</blockquote>
-      <figcaption><span className="lp-q-name">{name}</span><span className="lp-q-role">{role}</span></figcaption>
-    </figure>
   );
 }
 
@@ -281,6 +278,8 @@ function LandingStyles() {
 .lp-quote figcaption{display:flex;flex-direction:column;gap:2px}
 .lp-q-name{font-weight:600;font-size:13.5px;color:var(--clay-d)}
 .lp-q-role{font-size:12.5px;color:var(--ink2)}
+.lp-qtitle{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--clay-d);margin-bottom:10px}
+.lp-qbody{font-size:15px;line-height:1.5;color:var(--ink2);margin:0}
 
 /* final */
 .lp-final{padding:30px 26px 90px}
