@@ -145,20 +145,26 @@ export default function Soli() {
           await saveField(supabase, user.id, "demo_seeded", true);
         }
 
-        // Returning from Stripe Checkout: the webhook may lag a beat, so re-check
-        // the subscription a few times before giving up.
+        // Returning straight from Checkout: reconcile with Stripe before showing the
+        // UI so Pro appears immediately, independent of webhook timing/config.
         if (params.get("upgraded") === "1") {
-          for (let i = 0; i < 4 && !(sub === "active" || sub === "trialing"); i++) {
-            await new Promise((r) => setTimeout(r, 1800));
-            const fresh = await loadUserState(supabase, user.id);
-            if (fresh) { sub = fresh.subscription_status; trialEnd = fresh.trial_ends_at; }
-          }
+          try {
+            const d = await (await fetch("/api/subscription", { method: "POST" })).json();
+            if (d && d.status !== undefined) sub = d.status;
+          } catch { /* the background reconcile below will catch up */ }
         }
 
         setSettings(s); setClients(c); setProducts(pr); setLogs(lg); setPlan(pl);
         setTrialEndsAt(trialEnd); setSubStatus(sub);
         if (wantsDemo || params.get("upgraded") === "1") window.history.replaceState({}, "", "/app");
         setLoading(false);
+
+        // Background: keep subscription status honest with Stripe on every load, so a
+        // missed webhook self-heals and cancellations are caught. Non-blocking.
+        fetch("/api/subscription", { method: "POST" })
+          .then((r) => r.json())
+          .then((d) => { if (d && d.status !== undefined && d.status !== sub) setSubStatus(d.status); })
+          .catch(() => {});
       } catch (e) {
         console.error(e);
         setLoadError(e?.message || String(e));

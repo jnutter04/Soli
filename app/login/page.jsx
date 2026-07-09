@@ -27,10 +27,11 @@ export default function LoginPage() {
   const signInWithGoogle = async () => {
     setError(""); setNotice(""); setBusy(true);
     const supabase = createClient();
-    const next = new URLSearchParams(window.location.search).get("next") || "/app";
+    // Keep the redirect target clean (no query string) so it matches Supabase's
+    // allow-list exactly; the callback sends the user on to /app.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) { setError(error.message); setBusy(false); }
     // on success the browser is redirected to Google
