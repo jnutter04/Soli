@@ -445,6 +445,22 @@ function Stat({ label, value, tone }) {
   return (<div className={"soli-stat " + tone}><div className="soli-statlabel">{label}</div><div className="soli-statval">{value}</div></div>);
 }
 
+/* Best-effort spoken-number parser (Chrome/Safari usually return digits, but
+   this covers "sixty five", "one hundred twenty", etc. as a fallback). */
+function wordsToNumber(str) {
+  const small = { zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19 };
+  const tens = { twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90 };
+  let total = 0, current = 0, found = false;
+  for (const w of str.toLowerCase().replace(/-/g, " ").split(/\s+/)) {
+    if (small[w] != null) { current += small[w]; found = true; }
+    else if (tens[w] != null) { current += tens[w]; found = true; }
+    else if (w === "hundred") { current = (current || 1) * 100; found = true; }
+    else if (w === "thousand") { total += (current || 1) * 1000; current = 0; found = true; }
+  }
+  total += current;
+  return found ? total : null;
+}
+
 /* ------------------------------ LOG SERVICE ------------------------------ */
 function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates }) {
   const [clientId, setClientId] = useState(clients[0]?.id || "");
@@ -456,6 +472,13 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
   const [tplSaved, setTplSaved] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceMsg, setVoiceMsg] = useState("");
+
+  useEffect(() => {
+    setVoiceSupported(typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  }, []);
 
   const productCost = products.reduce((s, p) => s + (Number(qty[p.id]) || 0) * p.cost, 0);
   const priceN = Number(price) || 0, durN = Number(dur) || 0;
@@ -497,10 +520,48 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   };
   const deleteTemplate = (id) => saveTemplates(templates.filter(t => t.id !== id));
 
+  const applyVoice = (text) => {
+    const lower = text.toLowerCase();
+    // Price: prefer a spoken digit, else fall back to number words.
+    const digits = lower.match(/\d+(?:\.\d+)?/g);
+    const spokenPrice = digits ? Number(digits[digits.length - 1]) : wordsToNumber(lower);
+    // If the words match a saved template, apply the whole thing.
+    const tpl = templates.find(t => lower.includes(t.name.toLowerCase()));
+    if (tpl) {
+      applyTemplate(tpl);
+    } else {
+      const name = text.replace(/\$?\d+(?:\.\d+)?/g, "").replace(/\b(dollars?|bucks?|for|at)\b/gi, "").replace(/\s{2,}/g, " ").trim();
+      if (name) setService(name.charAt(0).toUpperCase() + name.slice(1));
+    }
+    if (spokenPrice != null && !Number.isNaN(spokenPrice)) setPrice(String(spokenPrice));
+    setVoiceMsg(`Heard: "${text}". Check it and hit Save.`);
+  };
+
+  const startVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setVoiceMsg("Voice isn't supported in this browser. Try Chrome or Safari."); return; }
+    const rec = new SR();
+    rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+    setListening(true); setVoiceMsg('Listening… try "lash fill 65" or a saved service name.');
+    rec.onresult = (e) => applyVoice(e.results[0][0].transcript);
+    rec.onerror = () => { setListening(false); setVoiceMsg("Didn't catch that. Tap and try again."); };
+    rec.onend = () => setListening(false);
+    rec.start();
+  };
+
   return (
     <div className="soli-page soli-narrow">
       <h1 className="soli-h1">Log a service</h1>
       <p className="soli-sub">Takes 20 seconds. Soli handles the profit, tax & take-home math.</p>
+
+      {voiceSupported && (
+        <div className="soli-voice">
+          <button type="button" className={"soli-voicebtn" + (listening ? " on" : "")} onClick={startVoice} disabled={listening}>
+            <span className="soli-voicedot" /> {listening ? "Listening…" : "🎤 Speak to log"}
+          </button>
+          {voiceMsg && <span className="soli-voicemsg">{voiceMsg}</span>}
+        </div>
+      )}
 
       {templates.length > 0 && (
         <div className="soli-tpl">
@@ -999,6 +1060,15 @@ function Styles() {
 .soli-tplapply{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);padding:8px 6px 8px 14px}
 .soli-tplx{border:none;background:none;cursor:pointer;color:var(--ink2);font-size:16px;line-height:1;padding:0 11px 0 4px}
 .soli-tplx:hover{color:var(--clay-d)}
+.soli-voice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.soli-voicebtn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;background:var(--surface);color:var(--ink);border:1px solid var(--line);padding:10px 16px;border-radius:11px;transition:.15s}
+.soli-voicebtn:hover{border-color:var(--clay)}
+.soli-voicebtn.on{background:var(--clay);color:#fff;border-color:var(--clay)}
+.soli-voicebtn:disabled{cursor:default}
+.soli-voicedot{width:9px;height:9px;border-radius:50%;background:var(--clay);display:none}
+.soli-voicebtn.on .soli-voicedot{display:inline-block;background:#fff;animation:voicepulse 1s ease-in-out infinite}
+@keyframes voicepulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+.soli-voicemsg{font-size:12.5px;color:var(--ink2)}
 
 .soli-trialbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:20px;font-size:13.5px;font-weight:500}
 .soli-trialbar span{display:inline-flex;align-items:center;gap:7px}
