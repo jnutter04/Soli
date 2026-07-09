@@ -194,6 +194,10 @@ export default function Soli() {
   const saveSettings = (v) => { setSettings(v); if (userId) saveField(supabase, userId, "settings", v); };
   const savePlan = (v) => { setPlan(v); if (userId) saveField(supabase, userId, "plan", v); };
 
+  // Service templates live inside the settings blob (no schema change needed).
+  const templates = settings.templates || [];
+  const saveTemplates = (v) => saveSettings({ ...settings, templates: v });
+
   const signOut = async () => {
     await supabase.auth.signOut();
     router.replace("/login");
@@ -286,7 +290,8 @@ export default function Soli() {
         )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
-          logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate} />}
+          logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
+          templates={templates} saveTemplates={saveTemplates} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} />}
@@ -441,7 +446,7 @@ function Stat({ label, value, tone }) {
 }
 
 /* ------------------------------ LOG SERVICE ------------------------------ */
-function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate }) {
+function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates }) {
   const [clientId, setClientId] = useState(clients[0]?.id || "");
   const [newClient, setNewClient] = useState("");
   const [service, setService] = useState("");
@@ -450,6 +455,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [paySource, setPaySource] = useState("card");
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
+  const [tplSaved, setTplSaved] = useState(false);
 
   const productCost = products.reduce((s, p) => s + (Number(qty[p.id]) || 0) * p.cost, 0);
   const priceN = Number(price) || 0, durN = Number(dur) || 0;
@@ -473,10 +479,42 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     setTimeout(() => setSaved(false), 2200);
   };
 
+  const applyTemplate = (t) => {
+    setService(t.name);
+    setPrice(String(t.price ?? ""));
+    setDur(String(t.durationMin ?? ""));
+    setPaySource(t.paySource || "card");
+    setQty(t.qty || {});
+  };
+  const saveAsTemplate = () => {
+    if (!service.trim() || !priceN || !durN) return;
+    const cleanQty = {};
+    Object.keys(qty).forEach(k => { const n = Number(qty[k]); if (n > 0) cleanQty[k] = n; });
+    const t = { id: uid(), name: service.trim(), price: priceN, durationMin: durN, paySource, qty: cleanQty };
+    const others = templates.filter(x => x.name.toLowerCase() !== t.name.toLowerCase());
+    saveTemplates([t, ...others]);
+    setTplSaved(true); setTimeout(() => setTplSaved(false), 2000);
+  };
+  const deleteTemplate = (id) => saveTemplates(templates.filter(t => t.id !== id));
+
   return (
     <div className="soli-page soli-narrow">
       <h1 className="soli-h1">Log a service</h1>
       <p className="soli-sub">Takes 20 seconds. Soli handles the profit, tax & take-home math.</p>
+
+      {templates.length > 0 && (
+        <div className="soli-tpl">
+          <div className="soli-tpllabel">Quick log from a saved service</div>
+          <div className="soli-tplrow">
+            {templates.map(t => (
+              <span className="soli-tplchip" key={t.id}>
+                <button type="button" className="soli-tplapply" onClick={() => applyTemplate(t)}>{t.name} · {money(t.price)}</button>
+                <button type="button" className="soli-tplx" onClick={() => deleteTemplate(t.id)} aria-label={"Delete " + t.name}>×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Field label="Client">
         <select className="soli-input" value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!newClient}>
@@ -526,6 +564,9 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       )}
 
       <button className="soli-cta" onClick={submit} disabled={!service || !priceN || !durN}>{saved ? "Saved ✓" : "Save service"}</button>
+      {service && priceN > 0 && durN > 0 && (
+        <button className="soli-ghost soli-tplsave" onClick={saveAsTemplate}>{tplSaved ? "Saved as template ✓" : "Save this as a template"}</button>
+      )}
     </div>
   );
 }
@@ -949,6 +990,15 @@ function Styles() {
 .soli-ghost{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-family:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-ghost:hover{border-color:var(--clay);color:var(--ink)}
 .soli-datatools .soli-del{width:100%;justify-content:center;padding:12px;margin-top:0}
+.soli-tplsave{margin-top:10px}
+.soli-tpl{margin-bottom:20px}
+.soli-tpllabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:9px}
+.soli-tplrow{display:flex;flex-wrap:wrap;gap:8px}
+.soli-tplchip{display:inline-flex;align-items:stretch;border:1px solid var(--line);background:var(--surface2);border-radius:20px;overflow:hidden}
+.soli-tplchip:hover{border-color:var(--clay)}
+.soli-tplapply{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);padding:8px 6px 8px 14px}
+.soli-tplx{border:none;background:none;cursor:pointer;color:var(--ink2);font-size:16px;line-height:1;padding:0 11px 0 4px}
+.soli-tplx:hover{color:var(--clay-d)}
 
 .soli-trialbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:20px;font-size:13.5px;font-weight:500}
 .soli-trialbar span{display:inline-flex;align-items:center;gap:7px}
