@@ -18,15 +18,25 @@ export default function ResetPasswordPage() {
     (async () => {
       const supabase = createClient();
       try {
-        const code = new URLSearchParams(window.location.search).get("code");
-        if (code) {
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get("token_hash");
+        const type = params.get("type");
+        const code = params.get("code");
+        // token_hash works on any device and isn't consumed by email link-scanners
+        // (verification runs here in the browser, not on a bare GET).
+        if (tokenHash && type) {
+          const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+          if (error) throw error;
+          window.history.replaceState({}, "", "/auth/reset");
+        } else if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
           window.history.replaceState({}, "", "/auth/reset");
         }
         const { data: { user } } = await supabase.auth.getUser();
         setValid(!!user);
-      } catch {
+      } catch (e) {
+        console.error("reset link error:", e);
         setValid(false);
       }
       setReady(true);
