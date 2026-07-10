@@ -304,6 +304,10 @@ export default function Soli() {
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email} />}
       </main>
+      <footer className="soli-appfoot">
+        Have feedback or a feature request?{" "}
+        <a href="mailto:trysoli.beauty@gmail.com?subject=Soli%20feedback">trysoli.beauty@gmail.com</a>
+      </footer>
     </div>
   );
 }
@@ -1039,6 +1043,9 @@ function Styles() {
 .soli-addbox{background:var(--surface2);border:1px dashed var(--line);border-radius:15px;padding:18px}
 .soli-addhead{font-weight:600;font-size:14px;margin-bottom:12px}
 .soli-help{font-size:12px;color:var(--ink2);margin-top:8px}
+.soli-appfoot{max-width:920px;margin:0 auto;padding:20px 22px 40px;text-align:center;font-size:13px;color:var(--ink2)}
+.soli-appfoot a{color:var(--clay-d);font-weight:600;text-decoration:none}
+.soli-appfoot a:hover{text-decoration:underline}
 
 .soli-empty{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:42px 28px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
 .soli-emptymark{width:60px;height:60px;border-radius:50%;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:6px;box-shadow:0 6px 16px rgba(188,107,76,.3)}
