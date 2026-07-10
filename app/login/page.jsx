@@ -17,7 +17,7 @@ function SunMark({ size = 20, stroke = 1.8, color }) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,6 +35,18 @@ export default function LoginPage() {
     });
     if (error) { setError(error.message); setBusy(false); }
     // on success the browser is redirected to Google
+  };
+
+  const sendReset = async (e) => {
+    e.preventDefault();
+    setError(""); setNotice(""); setBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
+    });
+    if (error) { setError(error.message); setBusy(false); return; }
+    setNotice("If an account exists for that email, a reset link is on its way. Check your inbox (and spam).");
+    setBusy(false);
   };
 
   const submit = async (e) => {
@@ -73,13 +85,16 @@ export default function LoginPage() {
           <span className="lg-logomark"><SunMark size={20} stroke={1.9} color="#fff" /></span>
           <span className="lg-word">Soli</span>
         </div>
-        <h1 className="lg-h1">{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
+        <h1 className="lg-h1">{mode === "signup" ? "Create your account" : mode === "forgot" ? "Reset your password" : "Welcome back"}</h1>
         <p className="lg-sub">
           {mode === "signup"
             ? "Start tracking what you actually keep."
+            : mode === "forgot"
+            ? "Enter your email and we'll send you a reset link."
             : "Sign in to see your numbers."}
         </p>
 
+        {mode !== "forgot" && (<>
         <button type="button" className="lg-google" onClick={signInWithGoogle} disabled={busy}>
           <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
             <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22 22-9.8 22-22c0-1.5-.2-2.6-.4-3.5z"/>
@@ -90,28 +105,42 @@ export default function LoginPage() {
           Continue with Google
         </button>
         <div className="lg-divider"><span>or</span></div>
+        </>)}
 
-        <form onSubmit={submit}>
+        <form onSubmit={mode === "forgot" ? sendReset : submit}>
           <label className="lg-label">Email</label>
           <input className="lg-input" type="email" autoComplete="email" required
             value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
 
-          <label className="lg-label">Password</label>
-          <input className="lg-input" type="password"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"} required
-            minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder={mode === "signup" ? "At least 6 characters" : "Your password"} />
+          {mode !== "forgot" && (
+            <>
+              <label className="lg-label">Password</label>
+              <input className="lg-input" type="password"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"} required
+                minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === "signup" ? "At least 6 characters" : "Your password"} />
+              {mode === "signin" && (
+                <div className="lg-forgot">
+                  <button type="button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>Forgot password?</button>
+                </div>
+              )}
+            </>
+          )}
 
           {error && <div className="lg-error">{error}</div>}
           {notice && <div className="lg-notice">{notice}</div>}
 
           <button className="lg-btn" type="submit" disabled={busy}>
-            {busy ? "One moment…" : mode === "signup" ? "Create account" : "Sign in"}
+            {busy ? "One moment…" : mode === "signup" ? "Create account" : mode === "forgot" ? "Send reset link" : "Sign in"}
           </button>
         </form>
 
         <div className="lg-switch">
-          {mode === "signup" ? (
+          {mode === "forgot" ? (
+            <>Remembered it?{" "}
+              <button onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Back to sign in</button>
+            </>
+          ) : mode === "signup" ? (
             <>Already have an account?{" "}
               <button onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Sign in</button>
             </>
@@ -154,6 +183,9 @@ function LoginStyles() {
 .lg-divider{display:flex;align-items:center;gap:12px;margin:18px 0}
 .lg-divider:before,.lg-divider:after{content:"";flex:1;height:1px;background:#E7DBC8}
 .lg-divider span{font-size:12.5px;color:#9c8a72}
+.lg-forgot{text-align:right;margin:-4px 0 14px}
+.lg-forgot button{background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:#A4583B;padding:0}
+.lg-forgot button:hover{text-decoration:underline}
 .lg-switch{margin-top:18px;text-align:center;font-size:14px;color:#6E5E4C}
 .lg-switch button{background:none;border:none;color:#A4583B;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;padding:0}
 .lg-switch button:hover{text-decoration:underline}
