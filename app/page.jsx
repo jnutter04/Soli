@@ -136,6 +136,24 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* TESTIMONIAL (real, from Jordan) */}
+      <section className="lp-testi">
+        <div className="lp-testi-inner">
+          <div className="lp-testi-mark">&ldquo;</div>
+          <blockquote className="lp-testi-quote">
+            I chose Soli because when I started out on my own it was difficult to keep track of finances.
+            Soli made it easy to put in the numbers and let it take care of the rest.
+          </blockquote>
+          <div className="lp-testi-by">
+            <span className="lp-testi-avatar">J</span>
+            <div>
+              <div className="lp-testi-name">Jordan</div>
+              <div className="lp-testi-role">Soli customer</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FINAL CTA */}
       <section className="lp-final">
         <div className="lp-final-inner">
@@ -280,6 +298,14 @@ function LandingStyles() {
 .lp-q-role{font-size:12.5px;color:var(--ink2)}
 .lp-qtitle{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--clay-d);margin-bottom:10px}
 .lp-qbody{font-size:15px;line-height:1.5;color:var(--ink2);margin:0}
+.lp-testi{padding:20px 26px 50px}
+.lp-testi-inner{max-width:720px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:38px 44px 32px;text-align:center;box-shadow:0 20px 50px -30px rgba(43,33,24,.3)}
+.lp-testi-mark{font-family:'Fraunces',serif;font-size:70px;line-height:.4;color:var(--clay);height:34px}
+.lp-testi-quote{font-family:'Fraunces',serif;font-weight:500;font-size:23px;line-height:1.5;color:var(--ink);margin:14px auto 26px;max-width:600px}
+.lp-testi-by{display:inline-flex;align-items:center;gap:12px}
+.lp-testi-avatar{width:46px;height:46px;border-radius:50%;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:600;font-size:21px}
+.lp-testi-name{font-weight:600;font-size:15px;text-align:left;color:var(--ink)}
+.lp-testi-role{font-size:13px;color:var(--ink2);text-align:left}
 
 /* final */
 .lp-final{padding:30px 26px 90px}
