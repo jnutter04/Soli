@@ -50,7 +50,7 @@ export default function LoginPage() {
     } catch (err) {
       console.error("Password reset failed:", err);
       const bits = [err?.message, err?.code, err?.status ? `HTTP ${err.status}` : null].filter(Boolean);
-      setError(bits.length ? bits.join(" · ") : "Reset request failed — likely an email/SMTP problem on the server.");
+      setError(bits.length ? bits.join(" · ") : "Reset request failed. This is likely an email/SMTP problem on the server.");
     } finally {
       setBusy(false);
     }
