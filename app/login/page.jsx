@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 /* Reusable sun mark (matches the app + landing) */
@@ -16,7 +15,6 @@ function SunMark({ size = 20, stroke = 1.8, color }) {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,9 +73,11 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
-      const next = new URLSearchParams(window.location.search).get("next") || "/app";
-      router.push(next);
-      router.refresh();
+      const rawNext = new URLSearchParams(window.location.search).get("next") || "/app";
+      // Only allow internal paths, and use a full navigation so the freshly-set
+      // session cookie is always present when /app loads (avoids a bounce).
+      const next = rawNext.startsWith("/") ? rawNext : "/app";
+      window.location.assign(next);
     } catch (err) {
       setError(err?.message || "Something went wrong. Please try again.");
       setBusy(false);
