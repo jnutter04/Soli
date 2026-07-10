@@ -147,8 +147,8 @@ export default function Landing() {
           <div className="lp-testi-by">
             <span className="lp-testi-avatar">J</span>
             <div>
-              <div className="lp-testi-name">Jordan</div>
-              <div className="lp-testi-role">Soli customer</div>
+              <div className="lp-testi-name">Jordan O.</div>
+              <div className="lp-testi-role">Licensed esthetician · WadeGordon, Amarillo</div>
             </div>
           </div>
         </div>
