@@ -40,13 +40,19 @@ export default function LoginPage() {
   const sendReset = async (e) => {
     e.preventDefault();
     setError(""); setNotice(""); setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset`,
-    });
-    if (error) { setError(error.message); setBusy(false); return; }
-    setNotice("If an account exists for that email, a reset link is on its way. Check your inbox (and spam).");
-    setBusy(false);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset`,
+      });
+      if (error) throw error;
+      setNotice("If an account exists for that email, a reset link is on its way. Check your inbox and spam.");
+    } catch (err) {
+      const msg = err?.message || err?.error_description || (typeof err === "string" ? err : JSON.stringify(err));
+      setError(msg || "Couldn't send the reset email. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async (e) => {
@@ -127,7 +133,7 @@ export default function LoginPage() {
             </>
           )}
 
-          {error && <div className="lg-error">{error}</div>}
+          {error && <div className="lg-error">{typeof error === "string" ? error : JSON.stringify(error)}</div>}
           {notice && <div className="lg-notice">{notice}</div>}
 
           <button className="lg-btn" type="submit" disabled={busy}>
