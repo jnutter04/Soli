@@ -48,8 +48,9 @@ export default function LoginPage() {
       if (error) throw error;
       setNotice("If an account exists for that email, a reset link is on its way. Check your inbox and spam.");
     } catch (err) {
-      const msg = err?.message || err?.error_description || (typeof err === "string" ? err : JSON.stringify(err));
-      setError(msg || "Couldn't send the reset email. Please try again.");
+      console.error("Password reset failed:", err);
+      const bits = [err?.message, err?.code, err?.status ? `HTTP ${err.status}` : null].filter(Boolean);
+      setError(bits.length ? bits.join(" · ") : "Reset request failed — likely an email/SMTP problem on the server.");
     } finally {
       setBusy(false);
     }
