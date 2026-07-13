@@ -508,6 +508,39 @@ function wordsToNumber(str) {
   return found ? total : null;
 }
 
+/* Starter service sets by trade. Prices/times are just editable defaults so a
+   brand-new user (e.g. from the flyer) isn't staring at a blank app. */
+const TRADES = {
+  esthetician: { label: "Esthetician", services: [
+    { name: "Classic Facial", price: 90, dur: 60 },
+    { name: "Dermaplane", price: 75, dur: 45 },
+    { name: "Chemical Peel", price: 120, dur: 45 },
+    { name: "Brow Wax & Shape", price: 20, dur: 15 },
+    { name: "Lash Lift & Tint", price: 90, dur: 60 },
+  ] },
+  barber: { label: "Barber", services: [
+    { name: "Haircut", price: 35, dur: 45 },
+    { name: "Skin Fade", price: 40, dur: 45 },
+    { name: "Beard Trim", price: 20, dur: 20 },
+    { name: "Cut & Beard", price: 55, dur: 60 },
+    { name: "Line-up", price: 15, dur: 15 },
+  ] },
+  cosmetologist: { label: "Hair / Cosmo", services: [
+    { name: "Women's Cut", price: 55, dur: 60 },
+    { name: "Men's Cut", price: 35, dur: 45 },
+    { name: "Root Color", price: 90, dur: 120 },
+    { name: "Full Highlights", price: 160, dur: 180 },
+    { name: "Blowout", price: 45, dur: 45 },
+  ] },
+  nails: { label: "Nails", services: [
+    { name: "Gel Manicure", price: 45, dur: 45 },
+    { name: "Classic Manicure", price: 30, dur: 30 },
+    { name: "Pedicure", price: 50, dur: 60 },
+    { name: "Full Set Acrylic", price: 65, dur: 90 },
+    { name: "Gel Fill", price: 45, dur: 60 },
+  ] },
+};
+
 /* ------------------------------ LOG SERVICE ------------------------------ */
 function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates }) {
   const [clientId, setClientId] = useState(clients[0]?.id || "");
@@ -571,6 +604,14 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   };
   const deleteTemplate = (id) => saveTemplates(templates.filter(t => t.id !== id));
 
+  const loadTrade = (key) => {
+    const trade = TRADES[key];
+    if (!trade) return;
+    const tpls = trade.services.map(s => ({ id: uid(), name: s.name, price: s.price, durationMin: s.dur, paySource: "card", qty: {} }));
+    const names = new Set(tpls.map(x => x.name.toLowerCase()));
+    saveTemplates([...tpls, ...templates.filter(x => !names.has(x.name.toLowerCase()))]);
+  };
+
   const updateImportRow = (id, key, v) => setImportRows(rows => rows.map(r => r.id === id ? { ...r, [key]: v } : r));
   const removeImportRow = (id) => setImportRows(rows => rows.filter(r => r.id !== id));
   const confirmImport = () => {
@@ -622,6 +663,18 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
             <span className="soli-voicedot" /> {listening ? "Listening…" : "🎤 Speak to log"}
           </button>
           {voiceMsg && <span className="soli-voicemsg">{voiceMsg}</span>}
+        </div>
+      )}
+
+      {templates.length === 0 && (
+        <div className="soli-tpl">
+          <div className="soli-tpllabel">New here? Load starter services for your trade</div>
+          <div className="soli-traderow">
+            {Object.entries(TRADES).map(([k, v]) => (
+              <button key={k} type="button" className="soli-tradebtn" onClick={() => loadTrade(k)}>{v.label}</button>
+            ))}
+          </div>
+          <p className="soli-help" style={{ marginTop: 8 }}>Just a starting point. Edit the names, prices, and times anytime after.</p>
         </div>
       )}
 
@@ -1187,6 +1240,9 @@ function Styles() {
 .soli-tpl{margin-bottom:20px}
 .soli-tpllabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:9px}
 .soli-tplrow{display:flex;flex-wrap:wrap;gap:8px}
+.soli-traderow{display:flex;flex-wrap:wrap;gap:8px}
+.soli-tradebtn{font-family:inherit;font-size:13.5px;font-weight:600;color:var(--clay-d);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:9px 16px;cursor:pointer;transition:.15s}
+.soli-tradebtn:hover{border-color:var(--clay);background:#F6E5DA}
 .soli-tplchip{display:inline-flex;align-items:stretch;border:1px solid var(--line);background:var(--surface2);border-radius:20px;overflow:hidden}
 .soli-tplchip:hover{border-color:var(--clay)}
 .soli-tplapply{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);padding:8px 6px 8px 14px}
