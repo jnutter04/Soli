@@ -91,6 +91,40 @@ function profitOf(log, rent) {
 const DEFAULT_SETTINGS = { boothRentHourly: 12, taxRate: 30 };
 const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 };
 
+/* Cost of one unit of a product. If a total `amount` is set, the product's
+   `cost` is the total cost and we divide (e.g. $10 / 100g = $0.10/g). If no
+   amount, `cost` is treated as a flat per-use cost, exactly like before. */
+const perUnitCost = (p) => (p && Number(p.amount) > 0 ? p.cost / p.amount : (p ? Number(p.cost) || 0 : 0));
+
+/* Forgivingly parse a pasted service list into { name, price, durationMin } rows.
+   Handles "Classic Facial - $120 - 60 min", "Lash Fill $65 (45 minutes)",
+   "Brow Lamination 85 30m". Leaves price/duration blank when absent. */
+function parseServiceImport(text) {
+  const rows = [];
+  for (const raw of String(text).split(/\n+/)) {
+    let line = raw.trim();
+    if (!line) continue;
+    let durationMin = "";
+    let m = line.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr|h)\b/i);
+    if (m) { durationMin = Math.round(parseFloat(m[1]) * 60); line = line.replace(m[0], " "); }
+    else {
+      m = line.match(/(\d+)\s*(?:minutes?|mins?|min|m)\b/i);
+      if (m) { durationMin = parseInt(m[1], 10); line = line.replace(m[0], " "); }
+    }
+    let price = "";
+    m = line.match(/\$\s*(\d+(?:\.\d+)?)/);
+    if (m) { price = parseFloat(m[1]); line = line.replace(m[0], " "); }
+    else {
+      m = line.match(/(?:^|\s)(\d{1,4}(?:\.\d{1,2})?)(?=\s|$)/);
+      if (m) { price = parseFloat(m[1]); line = line.replace(m[1], " "); }
+    }
+    const name = line.replace(/[-|(),:]+/g, " ").replace(/\s{2,}/g, " ").trim();
+    if (!name) continue;
+    rows.push({ id: uid(), name, price, durationMin });
+  }
+  return rows;
+}
+
 /* ================================ APP ==================================== */
 export default function Soli() {
   const router = useRouter();
@@ -318,10 +352,12 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
   const t = taxRate / 100;
   const totals = month.reduce((a, l) => {
     const { booth, profit } = profitOf(l, rent);
-    a.rev += l.price; a.prod += l.productCost; a.booth += booth; a.profit += profit; return a;
-  }, { rev: 0, prod: 0, booth: 0, profit: 0 });
+    a.rev += l.price; a.prod += l.productCost; a.booth += booth; a.profit += profit; a.tips += (Number(l.tip) || 0); return a;
+  }, { rev: 0, prod: 0, booth: 0, profit: 0, tips: 0 });
   const setAside = totals.profit * t;
   const takeHome = totals.profit - setAside;
+  const totalTips = totals.tips;
+  const pocketed = takeHome + totalTips;
 
   // income by source
   const bySource = useMemo(() => {
@@ -376,9 +412,9 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
       {/* take-home hero */}
       <div className="soli-hero">
         <div className="soli-heroblock">
-          <span className="soli-herolabel"><Wallet size={14} /> Your real take-home</span>
-          <span className="soli-heroval">{money2(takeHome)}</span>
-          <span className="soli-herosub">after product, booth rent & taxes</span>
+          <span className="soli-herolabel"><Wallet size={14} /> {totalTips > 0 ? "Take-home + tips" : "Your real take-home"}</span>
+          <span className="soli-heroval">{money2(pocketed)}</span>
+          <span className="soli-herosub">{totalTips > 0 ? `${money2(takeHome)} kept + ${money2(totalTips)} in tips` : "after product, booth rent & taxes"}</span>
         </div>
         <div className="soli-herojar">
           <span className="soli-jarlabel"><PiggyBank size={14} /> Tax jar</span>
@@ -412,6 +448,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
       {/* profit per hour */}
       <section className="soli-block">
         <div className="soli-blockhead"><TrendingUp size={18} strokeWidth={1.9} /><h2>Most profitable services, per hour</h2></div>
+        <p className="soli-note">Based on service price only. Tips are excluded here so the ranking stays fair, and counted in your take-home above.</p>
         <div className="soli-bars">
           {byService.map(s => (
             <div className="soli-barrow" key={s.name}>
@@ -478,10 +515,14 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [service, setService] = useState("");
   const [price, setPrice] = useState("");
   const [dur, setDur] = useState("");
+  const [tip, setTip] = useState("");
   const [paySource, setPaySource] = useState("card");
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
   const [tplSaved, setTplSaved] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importRows, setImportRows] = useState(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState("");
@@ -490,8 +531,8 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     setVoiceSupported(typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
-  const productCost = products.reduce((s, p) => s + (Number(qty[p.id]) || 0) * p.cost, 0);
-  const priceN = Number(price) || 0, durN = Number(dur) || 0;
+  const productCost = products.reduce((s, p) => s + (Number(qty[p.id]) || 0) * perUnitCost(p), 0);
+  const priceN = Number(price) || 0, durN = Number(dur) || 0, tipN = Number(tip) || 0;
   const pv = durN > 0 ? profitOf({ price: priceN, productCost, durationMin: durN }, rent) : null;
   const setAside = pv ? pv.profit * (taxRate / 100) : 0;
   const takeHome = pv ? pv.profit - setAside : 0;
@@ -507,8 +548,8 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       saveClients(clients.map(c => c.id === cid ? { ...c, lastVisit: new Date().toISOString() } : c));
     }
     saveLogs([{ id: uid(), clientId: cid, service: service.trim(), price: priceN, durationMin: durN,
-      paySource, productCost: Math.round(productCost * 100) / 100, date: new Date().toISOString() }, ...logs]);
-    setSaved(true); setService(""); setPrice(""); setDur(""); setQty({}); setNewClient(""); setPaySource("card");
+      paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100, date: new Date().toISOString() }, ...logs]);
+    setSaved(true); setService(""); setPrice(""); setDur(""); setTip(""); setQty({}); setNewClient(""); setPaySource("card");
     setTimeout(() => setSaved(false), 2200);
   };
 
@@ -529,6 +570,17 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     setTplSaved(true); setTimeout(() => setTplSaved(false), 2000);
   };
   const deleteTemplate = (id) => saveTemplates(templates.filter(t => t.id !== id));
+
+  const updateImportRow = (id, key, v) => setImportRows(rows => rows.map(r => r.id === id ? { ...r, [key]: v } : r));
+  const removeImportRow = (id) => setImportRows(rows => rows.filter(r => r.id !== id));
+  const confirmImport = () => {
+    const valid = (importRows || []).filter(r => String(r.name).trim());
+    const newTpls = valid.map(r => ({ id: uid(), name: String(r.name).trim(), price: Number(r.price) || 0, durationMin: Number(r.durationMin) || 0, paySource: "card", qty: {} }));
+    const names = new Set(newTpls.map(t => t.name.toLowerCase()));
+    const kept = templates.filter(t => !names.has(t.name.toLowerCase()));
+    saveTemplates([...newTpls, ...kept]);
+    setImportOpen(false); setImportText(""); setImportRows(null);
+  };
 
   const applyVoice = (text) => {
     const lower = text.toLowerCase();
@@ -587,6 +639,46 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         </div>
       )}
 
+      <div className="soli-import">
+        <button type="button" className="soli-importtoggle" onClick={() => { setImportOpen(o => !o); setImportRows(null); }}>
+          {importOpen ? "Close import" : "Import services from your booking app"}
+        </button>
+        {importOpen && (
+          <div className="soli-importpanel">
+            {!importRows ? (
+              <>
+                <p className="soli-help" style={{ marginTop: 0 }}>Paste your service list, one per line (from Booksy, etc.). Soli pulls out the name, price, and time.</p>
+                <textarea className="soli-importta" rows={6} value={importText} onChange={e => setImportText(e.target.value)}
+                  placeholder={"Classic Facial - $120 - 60 min\nLash Fill $65 (45 minutes)\nBrow Lamination 85 30m"} />
+                <button className="soli-cta sm" onClick={() => setImportRows(parseServiceImport(importText))} disabled={!importText.trim()}>Preview</button>
+              </>
+            ) : (
+              <>
+                {importRows.length === 0 ? (
+                  <p className="soli-help" style={{ marginTop: 0 }}>Nothing recognized. Check the format and try again.</p>
+                ) : (
+                  <div className="soli-invtable">
+                    <div className="soli-importhead"><span>Service</span><span>Price</span><span>Min</span><span></span></div>
+                    {importRows.map(r => (
+                      <div className="soli-importrow" key={r.id}>
+                        <input className="soli-input slim" value={r.name} onChange={e => updateImportRow(r.id, "name", e.target.value)} />
+                        <input className="soli-input slim" type="number" placeholder="?" value={r.price} onChange={e => updateImportRow(r.id, "price", e.target.value)} />
+                        <input className="soli-input slim" type="number" placeholder="?" value={r.durationMin} onChange={e => updateImportRow(r.id, "durationMin", e.target.value)} />
+                        <button className="soli-iconbtn" onClick={() => removeImportRow(r.id)}><Trash2 size={15} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="soli-editactions">
+                  <button className="soli-cta sm" onClick={confirmImport} disabled={!importRows.some(r => String(r.name).trim())}>Add {importRows.filter(r => String(r.name).trim()).length} services</button>
+                  <button className="soli-editbtn" onClick={() => setImportRows(null)}>Back</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <Field label="Client">
         <select className="soli-input" value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!newClient}>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -603,6 +695,11 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         <Field label="Time in chair (min)"><input className="soli-input" type="number" inputMode="numeric" placeholder="120" value={dur} onChange={e => setDur(e.target.value)} /></Field>
       </div>
 
+      <Field label="Tip (optional, $)">
+        <input className="soli-input" type="number" inputMode="decimal" placeholder="0" value={tip} onChange={e => setTip(e.target.value)} />
+        <p className="soli-help">Tips are tracked separately and don't affect profit or profit-per-hour, so they never distort which services are worth doing.</p>
+      </Field>
+
       <Field label="How did they pay?">
         <div className="soli-seg">
           {SOURCES.map(s => (
@@ -616,7 +713,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         <div className="soli-prodgrid">
           {products.map(p => (
             <div className="soli-prodpick" key={p.id}>
-              <span className="soli-prodname">{p.name}<small>{money2(p.cost)}/{p.unit}</small></span>
+              <span className="soli-prodname">{p.name}<small>{money2(perUnitCost(p))}/{p.unit}{Number(qty[p.id]) > 0 ? ` · = ${money2((Number(qty[p.id]) || 0) * perUnitCost(p))}` : ""}</small></span>
               <input className="soli-qty" type="number" inputMode="decimal" min="0" placeholder="0" value={qty[p.id] || ""} onChange={e => setQty({ ...qty, [p.id]: e.target.value })} />
             </div>
           ))}
@@ -630,7 +727,9 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
           <div className="soli-prevrow"><span>Pre-tax profit</span><span>{money2(pv.profit)}</span></div>
           <div className="soli-prevrow tax"><span>Set aside for taxes ({taxRate}%)</span><span>– {money2(setAside)}</span></div>
           <div className="soli-prevrow main"><span>You actually keep</span><span>{money2(takeHome)}</span></div>
-          <div className="soli-prevrow sub"><span>{money2(pv.perHour)}/hr · {Math.round(pv.margin * 100)}% margin</span></div>
+          {tipN > 0 && <div className="soli-prevrow"><span>+ Tip (separate from profit)</span><span>+ {money2(tipN)}</span></div>}
+          {tipN > 0 && <div className="soli-prevrow main"><span>Total you pocket</span><span>{money2(takeHome + tipN)}</span></div>}
+          <div className="soli-prevrow sub"><span>{money2(pv.perHour)}/hr · {Math.round(pv.margin * 100)}% margin · tips excluded</span></div>
         </div>
       )}
 
@@ -775,33 +874,42 @@ function ClientsView({ clients, logs, saveClients, rent }) {
 
 /* ------------------------------ INVENTORY -------------------------------- */
 function Inventory({ products, saveProducts }) {
-  const [name, setName] = useState(""); const [cost, setCost] = useState(""); const [unit, setUnit] = useState("use");
-  const add = () => { if (!name || !cost) return; saveProducts([...products, { id: uid(), name: name.trim(), cost: Number(cost), stock: 0, unit: unit || "use" }]); setName(""); setCost(""); setUnit("use"); };
-  const upd = (id, key, v) => saveProducts(products.map(p => p.id === id ? { ...p, [key]: key === "name" || key === "unit" ? v : Number(v) } : p));
+  const [name, setName] = useState(""); const [cost, setCost] = useState("");
+  const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("use");
+  const add = () => {
+    if (!name || !cost) return;
+    saveProducts([...products, { id: uid(), name: name.trim(), cost: Number(cost) || 0, amount: Number(amount) || 0, unit: unit || "use", stock: 0 }]);
+    setName(""); setCost(""); setAmount(""); setUnit("use");
+  };
+  const upd = (id, key, v) => saveProducts(products.map(p => p.id === id ? { ...p, [key]: (key === "name" || key === "unit") ? v : Number(v) } : p));
   const del = (id) => saveProducts(products.filter(p => p.id !== id));
   return (
     <div className="soli-page">
       <h1 className="soli-h1">Inventory & product costs</h1>
       <p className="soli-sub">What each product costs you. Soli uses this in every profit calc.</p>
+      <p className="soli-help" style={{ marginTop: 0, marginBottom: 16 }}>
+        Enter the <b>total cost</b> and <b>total amount</b> (e.g. $10 for a 100g tube, unit "g") and Soli tracks cost per unit. Leave <b>Amount</b> blank for a simple flat cost per use.
+      </p>
       {products.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0, marginBottom: 16 }}>No products yet. Add your supplies below so Soli can fold their cost into every profit calculation.</p>}
       <div className="soli-invtable">
-        <div className="soli-invhead"><span>Product</span><span>Cost</span><span>Per</span><span>Stock</span><span></span></div>
+        <div className="soli-invhead"><span>Product</span><span>Total cost</span><span>Amount</span><span>Unit</span><span></span></div>
         {products.map(p => (
           <div className="soli-invrow" key={p.id}>
             <input className="soli-input slim" value={p.name} onChange={e => upd(p.id, "name", e.target.value)} />
             <input className="soli-input slim" type="number" value={p.cost} onChange={e => upd(p.id, "cost", e.target.value)} />
+            <input className="soli-input slim" type="number" placeholder="opt" value={p.amount || ""} onChange={e => upd(p.id, "amount", e.target.value)} />
             <input className="soli-input slim" value={p.unit} onChange={e => upd(p.id, "unit", e.target.value)} />
-            <input className="soli-input slim" type="number" value={p.stock} onChange={e => upd(p.id, "stock", e.target.value)} />
             <button className="soli-iconbtn" onClick={() => del(p.id)}><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
       <div className="soli-addbox">
         <div className="soli-addhead">Add a product</div>
-        <div className="soli-row3">
+        <div className="soli-row4">
           <input className="soli-input" placeholder="Product name" value={name} onChange={e => setName(e.target.value)} />
-          <input className="soli-input" type="number" placeholder="Cost $" value={cost} onChange={e => setCost(e.target.value)} />
-          <input className="soli-input" placeholder="per (use/set)" value={unit} onChange={e => setUnit(e.target.value)} />
+          <input className="soli-input" type="number" placeholder="Total cost $" value={cost} onChange={e => setCost(e.target.value)} />
+          <input className="soli-input" type="number" placeholder="Amount (optional)" value={amount} onChange={e => setAmount(e.target.value)} />
+          <input className="soli-input" placeholder="Unit (g/ml/use)" value={unit} onChange={e => setUnit(e.target.value)} />
         </div>
         <button className="soli-cta sm" onClick={add}>Add product</button>
       </div>
@@ -975,6 +1083,8 @@ function Styles() {
 .soli-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .soli-row3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
 @media(max-width:540px){.soli-row3{grid-template-columns:1fr}}
+.soli-row4{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px}
+@media(max-width:540px){.soli-row4{grid-template-columns:1fr 1fr}}
 
 .soli-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 @media(max-width:540px){.soli-seg{grid-template-columns:repeat(2,1fr)}}
@@ -1036,6 +1146,15 @@ function Styles() {
 
 .soli-invtable{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:8px 12px;margin-bottom:20px;overflow-x:auto}
 .soli-invhead,.soli-invrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:430px}
+.soli-import{margin-bottom:20px}
+.soli-importtoggle{width:100%;border:1px dashed var(--line);background:var(--surface2);color:var(--clay-d);font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:11px;cursor:pointer;transition:.15s}
+.soli-importtoggle:hover{border-color:var(--clay)}
+.soli-importpanel{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.soli-importta{width:100%;font-family:'SFMono-Regular',ui-monospace,Menlo,monospace;font-size:13px;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:12px;outline:none;resize:vertical}
+.soli-importta:focus{border-color:var(--clay)}
+.soli-importhead,.soli-importrow{display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:360px}
+.soli-importhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:6px 4px;border-bottom:1px solid var(--line)}
+.soli-importrow{padding:5px 0}
 .soli-invhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
 .soli-invrow{padding:6px 0}
 .soli-iconbtn{background:none;border:none;cursor:pointer;color:var(--ink2);display:flex;justify-content:center}
