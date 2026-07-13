@@ -121,6 +121,14 @@ function ResetStyles() {
 .rp-btn:disabled{opacity:.55;cursor:not-allowed}
 .rp-btnlink{text-decoration:none}
 .rp-error{background:#F6E0D5;border:1px solid #E8C4B0;color:#A4583B;font-size:13.5px;border-radius:10px;padding:10px 12px;margin-bottom:14px}
+
+/* ---- dark mode ---- */
+[data-theme="dark"] .rp-root{background:#181410;color:#F2E9DB;background-image:radial-gradient(circle at 15% 0%,rgba(216,180,95,.10),transparent 42%),radial-gradient(circle at 88% 6%,rgba(203,125,91,.08),transparent 40%)}
+[data-theme="dark"] .rp-card{background:#241f19;border-color:#3a332b}
+[data-theme="dark"] .rp-word,[data-theme="dark"] .rp-h1{color:#F2E9DB}
+[data-theme="dark"] .rp-sub{color:#b4a68f}
+[data-theme="dark"] .rp-label{color:#F2E9DB}
+[data-theme="dark"] .rp-input{background:#2d2720;border-color:#3a332b;color:#F2E9DB}
 `}</style>
   );
 }

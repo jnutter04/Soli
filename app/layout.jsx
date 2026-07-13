@@ -26,9 +26,15 @@ export const metadata = {
   },
 };
 
+// Runs before paint so there's no light-mode flash. Uses saved choice, else OS.
+const themeInit = `(function(){try{var t=localStorage.getItem('soli-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.dataset.theme=t;}catch(e){}})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
       <body>{children}<Analytics /></body>
     </html>
   );

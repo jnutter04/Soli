@@ -196,6 +196,19 @@ function LoginStyles() {
 .lg-switch{margin-top:18px;text-align:center;font-size:14px;color:#6E5E4C}
 .lg-switch button{background:none;border:none;color:#A4583B;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;padding:0}
 .lg-switch button:hover{text-decoration:underline}
+
+/* ---- dark mode ---- */
+[data-theme="dark"] .lg-root{background:#181410;color:#F2E9DB;background-image:radial-gradient(circle at 15% 0%,rgba(216,180,95,.10),transparent 42%),radial-gradient(circle at 88% 6%,rgba(203,125,91,.08),transparent 40%)}
+[data-theme="dark"] .lg-card{background:#241f19;border-color:#3a332b}
+[data-theme="dark"] .lg-word,[data-theme="dark"] .lg-h1{color:#F2E9DB}
+[data-theme="dark"] .lg-sub,[data-theme="dark"] .lg-switch{color:#b4a68f}
+[data-theme="dark"] .lg-label{color:#F2E9DB}
+[data-theme="dark"] .lg-input{background:#2d2720;border-color:#3a332b;color:#F2E9DB}
+[data-theme="dark"] .lg-google{background:#2d2720;border-color:#3a332b;color:#F2E9DB}
+[data-theme="dark"] .lg-google:hover{background:#332d25}
+[data-theme="dark"] .lg-divider span{color:#8f8069}
+[data-theme="dark"] .lg-divider:before,[data-theme="dark"] .lg-divider:after{background:#3a332b}
+[data-theme="dark"] .lg-switch button{color:#e29a75}
 `}</style>
   );
 }

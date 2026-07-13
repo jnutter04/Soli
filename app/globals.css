@@ -4,3 +4,16 @@ body {
   padding: 0;
   background: #f6efe4;
 }
+
+:root {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background: #181410;
+}

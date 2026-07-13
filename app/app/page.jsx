@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
@@ -134,6 +134,14 @@ export default function Soli() {
   const [userId, setUserId] = useState(null);
   const [email, setEmail] = useState("");
   const [tab, setTab] = useState("dash");
+  const [theme, setTheme] = useState("light");
+  useEffect(() => { setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light"); }, []);
+  const toggleTheme = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("soli-theme", next); } catch {}
+    setTheme(next);
+  };
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [clients, setClients] = useState([]);
   const [products, setProducts] = useState([]);
@@ -309,6 +317,9 @@ export default function Soli() {
               <Icon size={16} strokeWidth={1.9} /><span>{label}</span>
             </button>
           ))}
+          <button onClick={toggleTheme} className="soli-navbtn soli-themebtn" title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode">
+            {theme === "dark" ? <Sun size={16} strokeWidth={1.9} /> : <Moon size={16} strokeWidth={1.9} />}
+          </button>
           <button onClick={signOut} className="soli-navbtn soli-signout" title={email ? `Signed in as ${email}` : "Sign out"}>
             <LogOut size={16} strokeWidth={1.9} /><span>Sign out</span>
           </button>
@@ -1208,6 +1219,27 @@ function Styles() {
 .soli-importhead,.soli-importrow{display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:360px}
 .soli-importhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:6px 4px;border-bottom:1px solid var(--line)}
 .soli-importrow{padding:5px 0}
+.soli-themebtn{padding:8px 11px}
+
+/* ---- dark mode ---- */
+[data-theme="dark"] .soli-root{
+  --bg:#181410;--surface:#241f19;--surface2:#2d2720;--ink:#F2E9DB;--ink2:#b4a68f;--line:#3a332b;
+  --clay:#cb7d5b;--clay-d:#e29a75;--sage:#8b996f;--sage-d:#a2b081;--profit:#a4b77f;--cost:#cf9a7d;--gold:#d8b45f;
+  background-image:radial-gradient(circle at 12% 0%,rgba(216,180,95,.07),transparent 42%),radial-gradient(circle at 90% 8%,rgba(203,125,91,.06),transparent 40%)}
+[data-theme="dark"] .soli-header{background:rgba(24,20,16,.85)}
+[data-theme="dark"] .soli-navbtn.active{color:#181410}
+[data-theme="dark"] .soli-segbtn.on{color:#181410}
+[data-theme="dark"] .soli-watch{background:linear-gradient(160deg,#2e241d,#291f19);border-color:#453529}
+[data-theme="dark"] .soli-watchrow{border-top-color:#3f3025}
+[data-theme="dark"] .soli-pill.late{background:#4a2f24;color:#eab199}
+[data-theme="dark"] .soli-pill.soon{background:#333a29;color:#c4d0a1}
+[data-theme="dark"] .soli-preview.good{background:#252f1e;border-color:#3d4b2d}
+[data-theme="dark"] .soli-preview.bad{background:#3a271e;border-color:#5a3a2b}
+[data-theme="dark"] .soli-preview.main{border-top-color:rgba(255,255,255,.12)}
+[data-theme="dark"] .soli-srcnote{background:#33241c;color:#e29a75}
+[data-theme="dark"] .soli-plangoal{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
+[data-theme="dark"] .soli-tradebtn:hover{background:#33241c}
+[data-theme="dark"] .soli-del{border-color:#5a3a2b}
 .soli-invhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
 .soli-invrow{padding:6px 0}
 .soli-iconbtn{background:none;border:none;cursor:pointer;color:var(--ink2);display:flex;justify-content:center}
