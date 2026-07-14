@@ -48,13 +48,14 @@ export default function Landing() {
             after product, booth rent, and the tax you should be setting aside. In about 20 seconds per client.
           </p>
           <div className="lp-cta-row">
-            <Link href="/app" className="lp-cta">See your real take-home →</Link>
-            <Link href="/app?demo=1" className="lp-cta-ghost">Try it with sample data</Link>
+            <Link href="/app?demo=1" className="lp-cta">Start free with sample data →</Link>
+            <Link href="/login" className="lp-cta-ghost">Sign in</Link>
           </div>
+          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away.</p>
           <div className="lp-trust">
             <span><Check /> No card required</span>
-            <span><Check /> Works in your browser</span>
-            <span><Check /> Your data stays on your device</span>
+            <span><Check /> Works on any device</span>
+            <span><Check /> Cancel anytime</span>
           </div>
         </div>
 
@@ -71,6 +72,14 @@ export default function Landing() {
           <div className="lp-hc-jar">
             <span><SunMark size={13} stroke={2} /> Set aside for taxes</span>
             <span className="lp-hc-jarval">$1,789.50</span>
+          </div>
+          <div className="lp-hc-chart">
+            <div className="lp-hc-chartlabel">Take-home by month</div>
+            <div className="lp-hc-bars">
+              {[40, 34, 52, 47, 63, 58, 74, 69, 88].map((h, i) => (
+                <span key={i} className="lp-hc-bar" style={{ height: h + "%" }} />
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -239,6 +248,7 @@ function LandingStyles() {
 .lp-cta.light{background:#fff;color:var(--clay-d);box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .lp-cta-ghost{font-weight:600;font-size:16px;padding:15px 22px;border-radius:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:.15s}
 .lp-cta-ghost:hover{border-color:var(--clay)}
+.lp-ctanote{font-size:13px;color:var(--ink2);margin:-8px 0 18px;max-width:460px}
 .lp-trust{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px;color:var(--ink2)}
 .lp-trust span{display:inline-flex;align-items:center;gap:6px}
 .lp-trust svg{color:var(--sage-d)}
@@ -254,6 +264,11 @@ function LandingStyles() {
 .lp-hc-jar{display:flex;justify-content:space-between;align-items:center;margin-top:14px;background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:13px;padding:13px 16px;font-size:13px}
 .lp-hc-jar span{display:inline-flex;align-items:center;gap:6px}
 .lp-hc-jarval{font-family:'Fraunces',serif;font-size:18px;font-weight:600}
+.lp-hc-chart{margin-top:16px;background:var(--surface2);border:1px solid var(--line);border-radius:13px;padding:13px 15px 11px}
+.lp-hc-chartlabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:10px}
+.lp-hc-bars{display:flex;align-items:flex-end;gap:7px;height:52px}
+.lp-hc-bar{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--sage),var(--sage-d));min-height:4px}
+.lp-hc-bar:last-child{background:linear-gradient(180deg,var(--clay),var(--clay-d))}
 
 /* band */
 .lp-band{background:var(--ink);color:#F4ECDE;margin:0;padding:78px 26px}
