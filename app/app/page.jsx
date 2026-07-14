@@ -359,8 +359,14 @@ export default function Soli() {
 
 /* ------------------------------ DASHBOARD -------------------------------- */
 function Dashboard({ logs, clients, rent, taxRate, setTab }) {
-  const month = logs.filter(l => new Date(l.date) >= new Date(Date.now() - 30 * 864e5));
   const t = taxRate / 100;
+  const now = Date.now();
+  const [range, setRange] = useState("30d");
+  const rangeTitle = { "30d": "Last 30 days", "90d": "Last 90 days", year: "This year", all: "All time" }[range];
+  const startMs = range === "all" ? 0
+    : range === "year" ? new Date(new Date().getFullYear(), 0, 1).getTime()
+    : now - (range === "90d" ? 90 : 30) * 864e5;
+  const month = logs.filter(l => new Date(l.date).getTime() >= startMs);
   const totals = month.reduce((a, l) => {
     const { booth, profit } = profitOf(l, rent);
     a.rev += l.price; a.prod += l.productCost; a.booth += booth; a.profit += profit; a.tips += (Number(l.tip) || 0); return a;
@@ -370,19 +376,38 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
   const totalTips = totals.tips;
   const pocketed = takeHome + totalTips;
 
-  // Trend vs the previous 30-day window (days 30-60 ago).
-  const prevMonth = logs.filter(l => {
+  // Trend vs the previous equal-length window (only for the rolling day ranges).
+  const isRolling = range === "30d" || range === "90d";
+  const rollDays = range === "90d" ? 90 : 30;
+  const prevMonth = isRolling ? logs.filter(l => {
     const d = new Date(l.date).getTime();
-    return d < Date.now() - 30 * 864e5 && d >= Date.now() - 60 * 864e5;
-  });
+    return d < now - rollDays * 864e5 && d >= now - 2 * rollDays * 864e5;
+  }) : [];
   const prevAgg = prevMonth.reduce((a, l) => {
     a.profit += profitOf(l, rent).profit; a.tips += (Number(l.tip) || 0); return a;
   }, { profit: 0, tips: 0 });
   const prevPocketed = prevAgg.profit * (1 - t) + prevAgg.tips;
   const trendDiff = pocketed - prevPocketed;
   const trendPct = prevPocketed > 0 ? Math.round((trendDiff / prevPocketed) * 100) : null;
-  const hasPrev = prevMonth.length > 0;
+  const hasPrev = isRolling && prevMonth.length > 0;
   const svcDelta = month.length - prevMonth.length;
+
+  // Take-home per calendar month for the last 12 months (the year view).
+  const byMonth = useMemo(() => {
+    const m = {};
+    logs.forEach(l => {
+      const d = new Date(l.date);
+      const key = d.getFullYear() + "-" + d.getMonth();
+      m[key] = (m[key] || 0) + (profitOf(l, rent).profit * (1 - t) + (Number(l.tip) || 0));
+    });
+    const out = []; const base = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const dd = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      out.push({ label: dd.toLocaleDateString(undefined, { month: "short" }), val: m[dd.getFullYear() + "-" + dd.getMonth()] || 0 });
+    }
+    return out;
+  }, [logs, rent, t]);
+  const maxMonth = Math.max(...byMonth.map(x => x.val), 1);
 
   // income by source
   const bySource = useMemo(() => {
@@ -431,8 +456,15 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
 
   return (
     <div className="soli-page">
-      <h1 className="soli-h1">Last 30 days</h1>
-      <p className="soli-sub">{month.length} services{hasPrev ? ` (${svcDelta >= 0 ? "+" : ""}${svcDelta} vs prev 30d)` : ""} · booth {money2(rent)}/hr · taxes set at {taxRate}%</p>
+      <div className="soli-dashhead">
+        <h1 className="soli-h1">{rangeTitle}</h1>
+        <div className="soli-rangeseg">
+          {[["30d", "30d"], ["90d", "90d"], ["year", "Year"], ["all", "All"]].map(([k, lbl]) => (
+            <button key={k} className={"soli-rangebtn" + (range === k ? " on" : "")} onClick={() => setRange(k)}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+      <p className="soli-sub">{month.length} services{hasPrev ? ` (${svcDelta >= 0 ? "+" : ""}${svcDelta} vs prev ${rollDays}d)` : ""} · booth {money2(rent)}/hr · taxes set at {taxRate}%</p>
 
       {/* take-home hero */}
       <div className="soli-hero">
@@ -442,7 +474,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
           <span className="soli-herosub">{totalTips > 0 ? `${money2(takeHome)} kept + ${money2(totalTips)} in tips` : "after product, booth rent & taxes"}</span>
           {hasPrev && (
             <span className={"soli-herodelta " + (trendDiff >= 0 ? "up" : "down")}>
-              {trendDiff >= 0 ? "▲" : "▼"} {trendPct != null ? `${Math.abs(trendPct)}%` : money2(Math.abs(trendDiff))} vs previous 30 days
+              {trendDiff >= 0 ? "▲" : "▼"} {trendPct != null ? `${Math.abs(trendPct)}%` : money2(Math.abs(trendDiff))} vs previous {rollDays} days
             </span>
           )}
         </div>
@@ -459,6 +491,21 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
         <Stat label="Booth time" value={"– " + money2(totals.booth)} tone="cost" />
         <Stat label="Pre-tax profit" value={money2(totals.profit)} tone="profit" />
       </div>
+
+      {/* take-home by month (the year view) */}
+      <section className="soli-block">
+        <div className="soli-blockhead"><TrendingUp size={18} strokeWidth={1.9} /><h2>Take-home by month</h2></div>
+        <p className="soli-note">Your monthly take-home (profit after tax, plus tips) over the last 12 months. Tap or hover a bar for the amount.</p>
+        <div className="soli-monthchart">
+          {byMonth.map((mo, i) => (
+            <div className="soli-monthcol" key={i} title={`${mo.label}: ${money2(mo.val)}`}>
+              <div className="soli-monthval">{mo.val > 0 ? money(mo.val) : ""}</div>
+              <div className="soli-monthbarwrap"><div className="soli-monthbar" style={{ height: Math.max(mo.val > 0 ? 4 : 0, (mo.val / maxMonth) * 100) + "%" }} /></div>
+              <div className="soli-monthlabel">{mo.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* income by source */}
       <section className="soli-block">
@@ -540,36 +587,6 @@ function wordsToNumber(str) {
 
 /* Starter service sets by trade. Prices/times are just editable defaults so a
    brand-new user (e.g. from the flyer) isn't staring at a blank app. */
-const TRADES = {
-  esthetician: { label: "Esthetician", services: [
-    { name: "Classic Facial", price: 90, dur: 60 },
-    { name: "Dermaplane", price: 75, dur: 45 },
-    { name: "Chemical Peel", price: 120, dur: 45 },
-    { name: "Brow Wax & Shape", price: 20, dur: 15 },
-    { name: "Lash Lift & Tint", price: 90, dur: 60 },
-  ] },
-  barber: { label: "Barber", services: [
-    { name: "Haircut", price: 35, dur: 45 },
-    { name: "Skin Fade", price: 40, dur: 45 },
-    { name: "Beard Trim", price: 20, dur: 20 },
-    { name: "Cut & Beard", price: 55, dur: 60 },
-    { name: "Line-up", price: 15, dur: 15 },
-  ] },
-  cosmetologist: { label: "Hair / Cosmo", services: [
-    { name: "Women's Cut", price: 55, dur: 60 },
-    { name: "Men's Cut", price: 35, dur: 45 },
-    { name: "Root Color", price: 90, dur: 120 },
-    { name: "Full Highlights", price: 160, dur: 180 },
-    { name: "Blowout", price: 45, dur: 45 },
-  ] },
-  nails: { label: "Nails", services: [
-    { name: "Gel Manicure", price: 45, dur: 45 },
-    { name: "Classic Manicure", price: 30, dur: 30 },
-    { name: "Pedicure", price: 50, dur: 60 },
-    { name: "Full Set Acrylic", price: 65, dur: 90 },
-    { name: "Gel Fill", price: 45, dur: 60 },
-  ] },
-};
 
 /* ------------------- trade starter service templates -------------------- */
 /* [name, price, durationMin]. Starting points only; users rename/reprice/delete. */
@@ -657,14 +674,6 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     saveTemplates([...toAdd, ...templates]);
   };
 
-  const loadTrade = (key) => {
-    const trade = TRADES[key];
-    if (!trade) return;
-    const tpls = trade.services.map(s => ({ id: uid(), name: s.name, price: s.price, durationMin: s.dur, paySource: "card", qty: {} }));
-    const names = new Set(tpls.map(x => x.name.toLowerCase()));
-    saveTemplates([...tpls, ...templates.filter(x => !names.has(x.name.toLowerCase()))]);
-  };
-
   const updateImportRow = (id, key, v) => setImportRows(rows => rows.map(r => r.id === id ? { ...r, [key]: v } : r));
   const removeImportRow = (id) => setImportRows(rows => rows.filter(r => r.id !== id));
   const confirmImport = () => {
@@ -716,18 +725,6 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
             <span className="soli-voicedot" /> {listening ? "Listening…" : "🎤 Speak to log"}
           </button>
           {voiceMsg && <span className="soli-voicemsg">{voiceMsg}</span>}
-        </div>
-      )}
-
-      {templates.length === 0 && (
-        <div className="soli-tpl">
-          <div className="soli-tpllabel">New here? Load starter services for your trade</div>
-          <div className="soli-traderow">
-            {Object.entries(TRADES).map(([k, v]) => (
-              <button key={k} type="button" className="soli-tradebtn" onClick={() => loadTrade(k)}>{v.label}</button>
-            ))}
-          </div>
-          <p className="soli-help" style={{ marginTop: 8 }}>Just a starting point. Edit the names, prices, and times anytime after.</p>
         </div>
       )}
 
@@ -1133,6 +1130,18 @@ function Styles() {
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .soli-h1{font-family:'Fraunces',serif;font-weight:600;font-size:34px;margin:0 0 4px;letter-spacing:-.6px}
 .soli-sub{color:var(--ink2);margin:0 0 24px;font-size:14.5px}
+.soli-dashhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.soli-rangeseg{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:3px}
+.soli-rangebtn{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink2);padding:6px 12px;border-radius:8px;transition:.12s}
+.soli-rangebtn:hover{color:var(--ink)}
+.soli-rangebtn.on{background:var(--ink);color:var(--bg)}
+.soli-monthchart{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:8px}
+.soli-monthcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.soli-monthval{font-size:9.5px;font-weight:600;color:var(--ink2);height:14px;white-space:nowrap}
+.soli-monthbarwrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.soli-monthbar{width:70%;max-width:26px;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--sage),var(--sage-d));transition:.2s;cursor:default}
+.soli-monthcol:hover .soli-monthbar{background:linear-gradient(180deg,var(--clay),var(--clay-d))}
+.soli-monthlabel{font-size:10.5px;color:var(--ink2);margin-top:6px}
 
 .soli-hero{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:14px}
 @media(max-width:560px){.soli-hero{grid-template-columns:1fr}.soli-tag{display:none}}
@@ -1334,9 +1343,6 @@ function Styles() {
 .soli-tpl{margin-bottom:20px}
 .soli-tpllabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:9px}
 .soli-tplrow{display:flex;flex-wrap:wrap;gap:8px}
-.soli-traderow{display:flex;flex-wrap:wrap;gap:8px}
-.soli-tradebtn{font-family:inherit;font-size:13.5px;font-weight:600;color:var(--clay-d);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:9px 16px;cursor:pointer;transition:.15s}
-.soli-tradebtn:hover{border-color:var(--clay);background:#F6E5DA}
 .soli-tplchip{display:inline-flex;align-items:stretch;border:1px solid var(--line);background:var(--surface2);border-radius:20px;overflow:hidden}
 .soli-tplchip:hover{border-color:var(--clay)}
 .soli-tplapply{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);padding:8px 6px 8px 14px}
