@@ -370,6 +370,20 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
   const totalTips = totals.tips;
   const pocketed = takeHome + totalTips;
 
+  // Trend vs the previous 30-day window (days 30-60 ago).
+  const prevMonth = logs.filter(l => {
+    const d = new Date(l.date).getTime();
+    return d < Date.now() - 30 * 864e5 && d >= Date.now() - 60 * 864e5;
+  });
+  const prevAgg = prevMonth.reduce((a, l) => {
+    a.profit += profitOf(l, rent).profit; a.tips += (Number(l.tip) || 0); return a;
+  }, { profit: 0, tips: 0 });
+  const prevPocketed = prevAgg.profit * (1 - t) + prevAgg.tips;
+  const trendDiff = pocketed - prevPocketed;
+  const trendPct = prevPocketed > 0 ? Math.round((trendDiff / prevPocketed) * 100) : null;
+  const hasPrev = prevMonth.length > 0;
+  const svcDelta = month.length - prevMonth.length;
+
   // income by source
   const bySource = useMemo(() => {
     const m = {}; month.forEach(l => { m[l.paySource || "other"] = (m[l.paySource || "other"] || 0) + l.price; });
@@ -418,7 +432,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
   return (
     <div className="soli-page">
       <h1 className="soli-h1">Last 30 days</h1>
-      <p className="soli-sub">{month.length} services · booth {money2(rent)}/hr · taxes set at {taxRate}%</p>
+      <p className="soli-sub">{month.length} services{hasPrev ? ` (${svcDelta >= 0 ? "+" : ""}${svcDelta} vs prev 30d)` : ""} · booth {money2(rent)}/hr · taxes set at {taxRate}%</p>
 
       {/* take-home hero */}
       <div className="soli-hero">
@@ -426,6 +440,11 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
           <span className="soli-herolabel"><Wallet size={14} /> {totalTips > 0 ? "Take-home + tips" : "Your real take-home"}</span>
           <span className="soli-heroval">{money2(pocketed)}</span>
           <span className="soli-herosub">{totalTips > 0 ? `${money2(takeHome)} kept + ${money2(totalTips)} in tips` : "after product, booth rent & taxes"}</span>
+          {hasPrev && (
+            <span className={"soli-herodelta " + (trendDiff >= 0 ? "up" : "down")}>
+              {trendDiff >= 0 ? "▲" : "▼"} {trendPct != null ? `${Math.abs(trendPct)}%` : money2(Math.abs(trendDiff))} vs previous 30 days
+            </span>
+          )}
         </div>
         <div className="soli-herojar">
           <span className="soli-jarlabel"><PiggyBank size={14} /> Tax jar</span>
@@ -552,6 +571,21 @@ const TRADES = {
   ] },
 };
 
+/* ------------------- trade starter service templates -------------------- */
+/* [name, price, durationMin]. Starting points only; users rename/reprice/delete. */
+const TRADE_STARTERS = {
+  esthetician: [["Classic facial", 90, 60], ["Dermaplaning", 75, 45], ["Chemical peel", 100, 45], ["Back facial", 110, 60], ["Brow wax", 20, 15], ["Lip wax", 12, 10]],
+  barber: [["Haircut", 35, 30], ["Fade", 40, 40], ["Beard trim", 20, 20], ["Haircut + beard", 50, 45], ["Hot towel shave", 35, 30], ["Kids cut", 25, 20]],
+  cosmo: [["Women's cut", 55, 45], ["Men's cut", 35, 30], ["Root color", 90, 120], ["Full highlight", 160, 150], ["Balayage", 200, 180], ["Blowout", 45, 45]],
+  nails: [["Gel manicure", 45, 45], ["Regular manicure", 30, 30], ["Pedicure", 50, 50], ["Full set acrylic", 60, 75], ["Fill", 40, 60], ["Gel-X full set", 70, 75]],
+};
+const TRADE_LIST = [
+  { key: "esthetician", label: "Esthetician" },
+  { key: "barber", label: "Barber" },
+  { key: "cosmo", label: "Cosmetology" },
+  { key: "nails", label: "Nails" },
+];
+
 /* ------------------------------ LOG SERVICE ------------------------------ */
 function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates }) {
   const [clientId, setClientId] = useState(clients[0]?.id || "");
@@ -614,6 +648,14 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     setTplSaved(true); setTimeout(() => setTplSaved(false), 2000);
   };
   const deleteTemplate = (id) => saveTemplates(templates.filter(t => t.id !== id));
+
+  const applyTrade = (key) => {
+    const starters = (TRADE_STARTERS[key] || []).map(([name, price, durationMin]) =>
+      ({ id: uid(), name, price, durationMin, paySource: "card", qty: {} }));
+    const have = new Set(templates.map(t => t.name.toLowerCase()));
+    const toAdd = starters.filter(s => !have.has(s.name.toLowerCase()));
+    saveTemplates([...toAdd, ...templates]);
+  };
 
   const loadTrade = (key) => {
     const trade = TRADES[key];
@@ -700,6 +742,18 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {templates.length === 0 && (
+        <div className="soli-trade">
+          <div className="soli-tradelabel">New here? Load starter services for your trade</div>
+          <div className="soli-traderow">
+            {TRADE_LIST.map(tr => (
+              <button key={tr.key} type="button" className="soli-tradebtn" onClick={() => applyTrade(tr.key)}>{tr.label}</button>
+            ))}
+          </div>
+          <p className="soli-help" style={{ marginTop: 9 }}>Loads editable services you can rename, reprice, or delete. Nothing is locked in.</p>
         </div>
       )}
 
@@ -1086,6 +1140,9 @@ function Styles() {
 .soli-herolabel{font-size:12.5px;display:flex;align-items:center;gap:6px;color:#D6DBC2;margin-bottom:8px}
 .soli-heroval{font-family:'Fraunces',serif;font-size:34px;font-weight:600;line-height:1}
 .soli-herosub{font-size:11.5px;opacity:.8;margin-top:6px}
+.soli-herodelta{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;margin-top:9px;padding:3px 10px;border-radius:20px;width:fit-content;background:rgba(255,255,255,.15)}
+.soli-herodelta.up{color:#cfe6ae}
+.soli-herodelta.down{color:#f2bda5}
 .soli-herojar{background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:18px;padding:20px 22px;display:flex;flex-direction:column}
 .soli-jarlabel{font-size:12.5px;display:flex;align-items:center;gap:6px;opacity:.92;margin-bottom:8px}
 .soli-jarval{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1}
@@ -1220,6 +1277,11 @@ function Styles() {
 .soli-importhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:6px 4px;border-bottom:1px solid var(--line)}
 .soli-importrow{padding:5px 0}
 .soli-themebtn{padding:8px 11px}
+.soli-trade{margin-bottom:20px;background:var(--surface2);border:1px dashed var(--line);border-radius:14px;padding:16px}
+.soli-tradelabel{font-size:13.5px;font-weight:600;margin-bottom:11px}
+.soli-traderow{display:flex;flex-wrap:wrap;gap:8px}
+.soli-tradebtn{font-family:inherit;font-size:13.5px;font-weight:600;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px;padding:9px 16px;cursor:pointer;transition:.15s}
+.soli-tradebtn:hover{border-color:var(--clay);background:#F6E5DA}
 
 /* ---- dark mode ---- */
 [data-theme="dark"] .soli-root{
