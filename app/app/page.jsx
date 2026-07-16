@@ -11,8 +11,19 @@ import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
 /* ------------------------------- helpers --------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const money = (n) => "$" + (Math.round(n)).toLocaleString();
-const money2 = (n) => "$" + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* Display currency. The user picks one in Settings; every money figure uses it.
+   (Soli's own subscription is billed by Stripe in USD regardless.) */
+const CURRENCIES = [
+  { code: "USD", symbol: "$", label: "US Dollar ($)" },
+  { code: "GBP", symbol: "£", label: "British Pound (£)" },
+  { code: "EUR", symbol: "€", label: "Euro (€)" },
+  { code: "CAD", symbol: "CA$", label: "Canadian Dollar (CA$)" },
+  { code: "AUD", symbol: "A$", label: "Australian Dollar (A$)" },
+];
+const curSymbol = (code) => (CURRENCIES.find((c) => c.code === code) || CURRENCIES[0]).symbol;
+let CUR = "$"; // active display symbol; set from the signed-in user's settings on each render
+const money = (n) => CUR + (Math.round(n)).toLocaleString();
+const money2 = (n) => CUR + (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString(); };
 const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const SOURCES = [
@@ -112,7 +123,7 @@ function parseServiceImport(text) {
       if (m) { durationMin = parseInt(m[1], 10); line = line.replace(m[0], " "); }
     }
     let price = "";
-    m = line.match(/\$\s*(\d+(?:\.\d+)?)/);
+    m = line.match(/[$£€]\s*(\d+(?:\.\d+)?)/);
     if (m) { price = parseFloat(m[1]); line = line.replace(m[0], " "); }
     else {
       m = line.match(/(?:^|\s)(\d{1,4}(?:\.\d{1,2})?)(?=\s|$)/);
@@ -264,6 +275,7 @@ export default function Soli() {
     saveSettings(DEFAULT_SETTINGS); savePlan(DEFAULT_PLAN);
   };
 
+  CUR = curSymbol(settings.currency); // keep money() in the user's chosen currency
   const rent = settings.boothRentHourly;
   const taxRate = settings.taxRate;
 
@@ -695,7 +707,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     if (tpl) {
       applyTemplate(tpl);
     } else {
-      const name = text.replace(/\$?\d+(?:\.\d+)?/g, "").replace(/\b(dollars?|bucks?|for|at)\b/gi, "").replace(/\s{2,}/g, " ").trim();
+      const name = text.replace(/[$£€]?\d+(?:\.\d+)?/g, "").replace(/\b(dollars?|pounds?|euros?|bucks?|quid|for|at)\b/gi, "").replace(/\s{2,}/g, " ").trim();
       if (name) setService(name.charAt(0).toUpperCase() + name.slice(1));
     }
     if (spokenPrice != null && !Number.isNaN(spokenPrice)) setPrice(String(spokenPrice));
@@ -806,11 +818,11 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       </Field>
 
       <div className="soli-row2">
-        <Field label="Price charged ($)"><input className="soli-input" type="number" inputMode="decimal" placeholder="120" value={price} onChange={e => setPrice(e.target.value)} /></Field>
+        <Field label={`Price charged (${CUR})`}><input className="soli-input" type="number" inputMode="decimal" placeholder="120" value={price} onChange={e => setPrice(e.target.value)} /></Field>
         <Field label="Time in chair (min)"><input className="soli-input" type="number" inputMode="numeric" placeholder="120" value={dur} onChange={e => setDur(e.target.value)} /></Field>
       </div>
 
-      <Field label="Tip (optional, $)">
+      <Field label={`Tip (optional, ${CUR})`}>
         <input className="soli-input" type="number" inputMode="decimal" placeholder="0" value={tip} onChange={e => setTip(e.target.value)} />
         <p className="soli-help">Tips are tracked separately and don't affect profit or profit-per-hour, so they never distort which services are worth doing.</p>
       </Field>
@@ -879,10 +891,10 @@ function Planner({ plan, savePlan, taxRate }) {
       <p className="soli-sub">Work backward from the take-home you actually want, and plan the future instead of just tracking the past.</p>
 
       <div className="soli-row2">
-        <Field label="Monthly take-home goal ($)"><input className="soli-input" type="number" value={goal} onChange={e => set("goal", e.target.value)} /></Field>
-        <Field label="Monthly booth rent ($)"><input className="soli-input" type="number" value={rent} onChange={e => set("monthlyRent", e.target.value)} /></Field>
+        <Field label={`Monthly take-home goal (${CUR})`}><input className="soli-input" type="number" value={goal} onChange={e => set("goal", e.target.value)} /></Field>
+        <Field label={`Monthly booth rent (${CUR})`}><input className="soli-input" type="number" value={rent} onChange={e => set("monthlyRent", e.target.value)} /></Field>
       </div>
-      <Field label="Average price per service ($)"><input className="soli-input" type="number" value={avg} onChange={e => set("avgPrice", e.target.value)} /></Field>
+      <Field label={`Average price per service (${CUR})`}><input className="soli-input" type="number" value={avg} onChange={e => set("avgPrice", e.target.value)} /></Field>
 
       <div className="soli-plancard">
         <div className="soli-planrow"><span>To take home</span><b>{money2(goal)}/mo</b></div>
@@ -1003,7 +1015,7 @@ function Inventory({ products, saveProducts }) {
       <h1 className="soli-h1">Inventory & product costs</h1>
       <p className="soli-sub">What each product costs you. Soli uses this in every profit calc.</p>
       <p className="soli-help" style={{ marginTop: 0, marginBottom: 16 }}>
-        Enter the <b>total cost</b> and <b>total amount</b> (e.g. $10 for a 100g tube, unit "g") and Soli tracks cost per unit. Leave <b>Amount</b> blank for a simple flat cost per use.
+        Enter the <b>total cost</b> and <b>total amount</b> (e.g. {CUR}10 for a 100g tube, unit "g") and Soli tracks cost per unit. Leave <b>Amount</b> blank for a simple flat cost per use.
       </p>
       {products.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0, marginBottom: 16 }}>No products yet. Add your supplies below so Soli can fold their cost into every profit calculation.</p>}
       <div className="soli-invtable">
@@ -1022,7 +1034,7 @@ function Inventory({ products, saveProducts }) {
         <div className="soli-addhead">Add a product</div>
         <div className="soli-row4">
           <input className="soli-input" placeholder="Product name" value={name} onChange={e => setName(e.target.value)} />
-          <input className="soli-input" type="number" placeholder="Total cost $" value={cost} onChange={e => setCost(e.target.value)} />
+          <input className="soli-input" type="number" placeholder={`Total cost ${CUR}`} value={cost} onChange={e => setCost(e.target.value)} />
           <input className="soli-input" type="number" placeholder="Amount (optional)" value={amount} onChange={e => setAmount(e.target.value)} />
           <input className="soli-input" placeholder="Unit (g/ml/use)" value={unit} onChange={e => setUnit(e.target.value)} />
         </div>
@@ -1061,7 +1073,14 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         {email && <p className="soli-help">Signed in as {email}</p>}
       </div>
 
-      <Field label="Booth rent, cost per hour ($)">
+      <Field label="Currency">
+        <select className="soli-input" value={settings.currency || "USD"}
+          onChange={e => saveSettings({ ...settings, currency: e.target.value })}>
+          {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+        </select>
+        <p className="soli-help">The symbol shown on every figure in Soli. Your Soli subscription is billed separately by Stripe in USD.</p>
+      </Field>
+      <Field label={`Booth rent, cost per hour (${curSymbol(settings.currency)})`}>
         <input className="soli-input" type="number" value={settings.boothRentHourly}
           onChange={e => saveSettings({ ...settings, boothRentHourly: Number(e.target.value) })} />
         <p className="soli-help">The engine behind every profit number. Set it to your real chair/booth cost, or 0 if you don't pay rent.</p>
