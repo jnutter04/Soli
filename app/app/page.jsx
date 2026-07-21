@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
@@ -101,6 +101,40 @@ function profitOf(log, rent) {
    so each user works entirely from their own real numbers. */
 const DEFAULT_SETTINGS = { boothRentHourly: 12, taxRate: 30 };
 const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 };
+
+/* Specialties (for the product filter + starter products). */
+const SPECIALTIES = [
+  { key: "esthetician", label: "Esthetician" },
+  { key: "barber", label: "Barber" },
+  { key: "cosmo", label: "Cosmetologist / Stylist" },
+  { key: "nails", label: "Nail tech" },
+];
+const specialtyLabel = (k) => (SPECIALTIES.find((s) => s.key === k) || {}).label || "";
+
+/* Small starter product lists per specialty: [name, totalCost, amount, unit]. */
+const STARTER_PRODUCTS = {
+  esthetician: [["Cleanser", 24, 240, "ml"], ["Serum", 40, 30, "ml"], ["Mask", 30, 200, "ml"], ["Wax", 20, 400, "g"], ["Gloves", 8, 100, "pair"]],
+  barber: [["Clipper oil", 6, 120, "ml"], ["Blade wash", 8, 500, "ml"], ["Neck strips", 7, 100, "strip"], ["Pomade", 14, 100, "g"], ["Talc", 5, 300, "g"]],
+  cosmo: [["Color tube", 9, 60, "g"], ["Developer", 12, 1000, "ml"], ["Foils", 10, 500, "sheet"], ["Shampoo", 18, 1000, "ml"], ["Toner", 11, 60, "g"]],
+  nails: [["Gel polish", 9, 15, "ml"], ["Base/top coat", 12, 15, "ml"], ["Acrylic powder", 20, 240, "g"], ["Nail file", 6, 50, "file"], ["Acetone", 7, 1000, "ml"]],
+};
+
+/* Booth rent can be entered hourly / weekly / monthly. We convert everything to
+   an hourly rate so profitOf (unchanged) keeps working the same way. */
+const boothHourly = (s) => {
+  const unit = s.boothRentUnit || "hour";
+  const amt = Number(s.boothRentAmount);
+  const hpw = Number(s.boothRentHoursPerWeek) || 0;
+  if (unit === "week" && amt > 0 && hpw > 0) return amt / hpw;
+  if (unit === "month" && amt > 0 && hpw > 0) return (amt * 12 / 52) / hpw;
+  if (unit === "hour" && s.boothRentAmount !== undefined && s.boothRentAmount !== "") return amt || 0;
+  return Number(s.boothRentHourly) || 0; // legacy accounts
+};
+
+/* Week helpers (weeks start Monday). */
+const weekStartMs = (d) => { const dt = new Date(d); dt.setHours(0, 0, 0, 0); dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); return dt.getTime(); };
+const weekLabel = (ms) => "Week of " + new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const isoWeekNum = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const wk1 = new Date(d.getFullYear(), 0, 4); return 1 + Math.round(((d - wk1) / 864e5 - 3 + ((wk1.getDay() + 6) % 7)) / 7); };
 
 /* Cost of one unit of a product. If a total `amount` is set, the product's
    `cost` is the total cost and we divide (e.g. $10 / 100g = $0.10/g). If no
@@ -276,7 +310,7 @@ export default function Soli() {
   };
 
   CUR = curSymbol(settings.currency); // keep money() in the user's chosen currency
-  const rent = settings.boothRentHourly;
+  const rent = boothHourly(settings);
   const taxRate = settings.taxRate;
 
   // Access: active subscription, a payment-retry grace period, or the free trial.
@@ -289,6 +323,7 @@ export default function Soli() {
 
   const nav = [
     { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
+    { id: "week", label: "Weekly", Icon: CalendarDays },
     { id: "log", label: "Log service", Icon: PlusCircle },
     { id: "plan", label: "What to charge", Icon: Calculator },
     { id: "clients", label: "Clients", Icon: Users },
@@ -351,13 +386,14 @@ export default function Soli() {
             <button onClick={goPortal} disabled={billingBusy}>{billingBusy ? "One moment…" : "Update payment"}</button>
           </div>
         )}
-        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} />}
+        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} />}
+        {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
-          templates={templates} saveTemplates={saveTemplates} />}
+          templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
-        {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} />}
+        {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email} />}
       </main>
@@ -370,7 +406,7 @@ export default function Soli() {
 }
 
 /* ------------------------------ DASHBOARD -------------------------------- */
-function Dashboard({ logs, clients, rent, taxRate, setTab }) {
+function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
@@ -519,6 +555,21 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
         </div>
       </section>
 
+      {buckets.length > 0 && (
+        <section className="soli-block">
+          <div className="soli-blockhead"><PiggyBank size={18} strokeWidth={1.9} /><h2>Savings set-asides</h2></div>
+          <p className="soli-note">Your own suggested set-asides from what you kept ({money2(takeHome)}) over {rangeTitle.toLowerCase()}. Tracker only, not financial advice.</p>
+          <div className="soli-srcgrid">
+            {buckets.map(b => (
+              <div className="soli-srccell" key={b.id}>
+                <span className="soli-srclabel">{b.name} · {b.pct}%</span>
+                <span className="soli-srcval">{money2(takeHome * b.pct / 100)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* income by source */}
       <section className="soli-block">
         <div className="soli-blockhead"><Banknote size={18} strokeWidth={1.9} /><h2>Where your money came in</h2></div>
@@ -577,6 +628,98 @@ function Dashboard({ logs, clients, rent, taxRate, setTab }) {
   );
 }
 
+/* ------------------------------ WEEKLY VIEW ------------------------------ */
+function WeeklyView({ logs, rent, taxRate }) {
+  const t = taxRate / 100;
+  const weeks = useMemo(() => {
+    const m = {};
+    logs.forEach(l => {
+      const ws = weekStartMs(l.date);
+      const w = m[ws] || (m[ws] = { ws, booked: 0, booth: 0, profit: 0, tips: 0, hours: 0, count: 0 });
+      const { booth, profit } = profitOf(l, rent);
+      w.booked += l.price; w.booth += booth; w.profit += profit;
+      w.tips += (Number(l.tip) || 0); w.hours += l.durationMin / 60; w.count++;
+    });
+    return Object.values(m)
+      .map(w => ({ ...w, kept: w.profit * (1 - t) + w.tips, perHour: w.hours > 0 ? w.profit / w.hours : 0 }))
+      .sort((a, b) => b.ws - a.ws);
+  }, [logs, rent, t]);
+
+  if (weeks.length === 0) {
+    return (
+      <div className="soli-page">
+        <h1 className="soli-h1">Weekly breakdown</h1>
+        <p className="soli-sub">Your week-by-week booked, kept, booth rent, and profit per hour.</p>
+        <div className="soli-empty">
+          <span className="soli-emptymark"><CalendarDays size={26} strokeWidth={1.8} /></span>
+          <h2>No weeks yet</h2>
+          <p>Log a few services and your weekly breakdown, plus your strongest and slowest weeks, builds here automatically.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const enoughForStats = weeks.length >= 4;
+  const avgKept = weeks.reduce((s, w) => s + w.kept, 0) / weeks.length;
+  const byKept = [...weeks].sort((a, b) => b.kept - a.kept);
+  const best = byKept[0], worst = byKept[byKept.length - 1];
+
+  const years = new Set(weeks.map(w => new Date(w.ws).getFullYear()));
+  const multiYear = years.size >= 2;
+  let slowWeeks = [];
+  if (multiYear) {
+    const byIso = {};
+    weeks.forEach(w => { const k = isoWeekNum(w.ws); (byIso[k] = byIso[k] || []).push(w); });
+    slowWeeks = Object.entries(byIso)
+      .map(([k, arr]) => ({ iso: Number(k), avg: arr.reduce((s, w) => s + w.kept, 0) / arr.length, count: arr.length, sample: arr[0].ws }))
+      .filter(x => x.count >= 2 && x.avg < avgKept * 0.7)
+      .sort((a, b) => a.avg - b.avg).slice(0, 4);
+  }
+
+  return (
+    <div className="soli-page">
+      <h1 className="soli-h1">Weekly breakdown</h1>
+      <p className="soli-sub">{weeks.length} weeks with activity · booked, kept, booth rent, and profit per hour</p>
+
+      {enoughForStats && (
+        <div className="soli-cards">
+          <Stat label="Avg kept / week" value={money2(avgKept)} tone="profit" />
+          <Stat label="Strongest week" value={money2(best.kept)} tone="neutral" />
+          <Stat label="Slowest week" value={money2(worst.kept)} tone="cost" />
+          <Stat label="Weeks tracked" value={String(weeks.length)} tone="neutral" />
+        </div>
+      )}
+
+      {multiYear && slowWeeks.length > 0 && (
+        <section className="soli-block soli-watch">
+          <div className="soli-blockhead"><AlertTriangle size={18} strokeWidth={1.9} /><h2>Recurring slow weeks</h2></div>
+          <p className="soli-note">Calendar weeks that came in below average in more than one year. Worth planning a promo or time off around.</p>
+          {slowWeeks.map(s => (
+            <div className="soli-watchrow" key={s.iso}><span>Around {weekLabel(weekStartMs(s.sample))} (week {s.iso})</span><span className="soli-watchval">{money2(s.avg)} avg kept</span></div>
+          ))}
+        </section>
+      )}
+
+      <section className="soli-block">
+        <div className="soli-blockhead"><CalendarDays size={18} strokeWidth={1.9} /><h2>Week by week</h2></div>
+        {!enoughForStats && <p className="soli-note">A few more weeks of data will unlock your strongest and slowest week comparisons.</p>}
+        <div className="soli-weektable">
+          <div className="soli-weekhead"><span>Week</span><span>Booked</span><span>Booth</span><span>Kept</span><span>Per hr</span></div>
+          {weeks.map(w => (
+            <div className="soli-weekrow" key={w.ws}>
+              <span className="soli-weekname">{weekLabel(w.ws)}<small>{w.count} {w.count === 1 ? "service" : "services"}</small></span>
+              <span>{money2(w.booked)}</span>
+              <span className="soli-weekcost">{money2(w.booth)}</span>
+              <span className="soli-weekkept">{money2(w.kept)}</span>
+              <span>{money2(w.perHour)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function Stat({ label, value, tone }) {
   return (<div className={"soli-stat " + tone}><div className="soli-statlabel">{label}</div><div className="soli-statval">{value}</div></div>);
 }
@@ -616,7 +759,10 @@ const TRADE_LIST = [
 ];
 
 /* ------------------------------ LOG SERVICE ------------------------------ */
-function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates }) {
+function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates, specialty }) {
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const filtered = (specialty && !showAllProducts) ? products.filter(p => !p.specialty || p.specialty === specialty) : products;
+  const hiddenCount = products.length - filtered.length;
   const [clientId, setClientId] = useState(clients[0]?.id || "");
   const [newClient, setNewClient] = useState("");
   const [service, setService] = useState("");
@@ -837,8 +983,14 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
 
       <Field label="Product used (set quantities)">
         {products.length === 0 && <p className="soli-help">No products yet. Add your supplies under <b>Inventory</b> to auto-track product cost. You can still log a service without them.</p>}
+        {specialty && products.length > 0 && (
+          <p className="soli-help" style={{ marginTop: 0 }}>
+            Showing {showAllProducts ? "all products" : `${specialtyLabel(specialty)} products`}
+            {hiddenCount > 0 || showAllProducts ? <> · <button type="button" className="soli-linkbtn" onClick={() => setShowAllProducts(v => !v)}>{showAllProducts ? "show mine only" : "show all"}</button></> : null}
+          </p>
+        )}
         <div className="soli-prodgrid">
-          {products.map(p => (
+          {filtered.map(p => (
             <div className="soli-prodpick" key={p.id}>
               <span className="soli-prodname">{p.name}<small>{money2(perUnitCost(p))}/{p.unit}{Number(qty[p.id]) > 0 ? ` · = ${money2((Number(qty[p.id]) || 0) * perUnitCost(p))}` : ""}</small></span>
               <input className="soli-qty" type="number" inputMode="decimal" min="0" placeholder="0" value={qty[p.id] || ""} onChange={e => setQty({ ...qty, [p.id]: e.target.value })} />
@@ -1000,32 +1152,46 @@ function ClientsView({ clients, logs, saveClients, rent }) {
 }
 
 /* ------------------------------ INVENTORY -------------------------------- */
-function Inventory({ products, saveProducts }) {
+function Inventory({ products, saveProducts, specialty }) {
   const [name, setName] = useState(""); const [cost, setCost] = useState("");
   const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("use");
+  const [prodSpec, setProdSpec] = useState(specialty || "");
   const add = () => {
     if (!name || !cost) return;
-    saveProducts([...products, { id: uid(), name: name.trim(), cost: Number(cost) || 0, amount: Number(amount) || 0, unit: unit || "use", stock: 0 }]);
-    setName(""); setCost(""); setAmount(""); setUnit("use");
+    saveProducts([...products, { id: uid(), name: name.trim(), cost: Number(cost) || 0, amount: Number(amount) || 0, unit: unit || "use", specialty: prodSpec || undefined, stock: 0 }]);
+    setName(""); setCost(""); setAmount(""); setUnit("use"); setProdSpec(specialty || "");
   };
-  const upd = (id, key, v) => saveProducts(products.map(p => p.id === id ? { ...p, [key]: (key === "name" || key === "unit") ? v : Number(v) } : p));
+  const upd = (id, key, v) => saveProducts(products.map(p => p.id === id ? { ...p, [key]: (key === "name" || key === "unit" || key === "specialty") ? v : Number(v) } : p));
   const del = (id) => saveProducts(products.filter(p => p.id !== id));
+  const loadStarters = () => {
+    if (!specialty) return;
+    const starters = (STARTER_PRODUCTS[specialty] || []).map(([n, c, a, u]) => ({ id: uid(), name: n, cost: c, amount: a, unit: u, specialty, stock: 0 }));
+    const have = new Set(products.map(p => p.name.toLowerCase()));
+    saveProducts([...products, ...starters.filter(s => !have.has(s.name.toLowerCase()))]);
+  };
   return (
     <div className="soli-page">
       <h1 className="soli-h1">Inventory & product costs</h1>
       <p className="soli-sub">What each product costs you. Soli uses this in every profit calc.</p>
       <p className="soli-help" style={{ marginTop: 0, marginBottom: 16 }}>
-        Enter the <b>total cost</b> and <b>total amount</b> (e.g. {CUR}10 for a 100g tube, unit "g") and Soli tracks cost per unit. Leave <b>Amount</b> blank for a simple flat cost per use.
+        Enter the <b>total cost</b> and <b>total amount</b> (e.g. {CUR}10 for a 100g tube, unit "g") and Soli tracks cost per unit. Leave <b>Amount</b> blank for a simple flat cost per use. Tag a product for a specialty, or leave it for everyone.
       </p>
+      {specialty && (
+        <button type="button" className="soli-tradebtn" style={{ marginBottom: 16 }} onClick={loadStarters}>Load starter products for {specialtyLabel(specialty)}</button>
+      )}
       {products.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0, marginBottom: 16 }}>No products yet. Add your supplies below so Soli can fold their cost into every profit calculation.</p>}
       <div className="soli-invtable">
-        <div className="soli-invhead"><span>Product</span><span>Total cost</span><span>Amount</span><span>Unit</span><span></span></div>
+        <div className="soli-invhead"><span>Product</span><span>Total cost</span><span>Amount</span><span>Unit</span><span>For</span><span></span></div>
         {products.map(p => (
           <div className="soli-invrow" key={p.id}>
             <input className="soli-input slim" value={p.name} onChange={e => upd(p.id, "name", e.target.value)} />
             <input className="soli-input slim" type="number" value={p.cost} onChange={e => upd(p.id, "cost", e.target.value)} />
             <input className="soli-input slim" type="number" placeholder="opt" value={p.amount || ""} onChange={e => upd(p.id, "amount", e.target.value)} />
             <input className="soli-input slim" value={p.unit} onChange={e => upd(p.id, "unit", e.target.value)} />
+            <select className="soli-input slim" value={p.specialty || ""} onChange={e => upd(p.id, "specialty", e.target.value)}>
+              <option value="">Everyone</option>
+              {SPECIALTIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
             <button className="soli-iconbtn" onClick={() => del(p.id)}><Trash2 size={15} /></button>
           </div>
         ))}
@@ -1038,7 +1204,11 @@ function Inventory({ products, saveProducts }) {
           <input className="soli-input" type="number" placeholder="Amount (optional)" value={amount} onChange={e => setAmount(e.target.value)} />
           <input className="soli-input" placeholder="Unit (g/ml/use)" value={unit} onChange={e => setUnit(e.target.value)} />
         </div>
-        <button className="soli-cta sm" onClick={add}>Add product</button>
+        <select className="soli-input" style={{ marginTop: 10 }} value={prodSpec} onChange={e => setProdSpec(e.target.value)}>
+          <option value="">For everyone</option>
+          {SPECIALTIES.map(s => <option key={s.key} value={s.key}>For {s.label}</option>)}
+        </select>
+        <button className="soli-cta sm" style={{ marginTop: 10 }} onClick={add}>Add product</button>
       </div>
     </div>
   );
@@ -1048,6 +1218,13 @@ function Inventory({ products, saveProducts }) {
 function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email }) {
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
+  const bUnit = settings.boothRentUnit || "hour";
+  const setBooth = (patch) => { const next = { ...settings, ...patch }; next.boothRentHourly = boothHourly(next); saveSettings(next); };
+  const buckets = settings.buckets || [];
+  const setBuckets = (v) => saveSettings({ ...settings, buckets: v });
+  const addBucket = (name, pct) => setBuckets([...buckets, { id: uid(), name, pct: Math.max(0, Math.min(100, Number(pct) || 0)) }]);
+  const updBucket = (id, key, v) => setBuckets(buckets.map(b => b.id === id ? { ...b, [key]: key === "pct" ? Math.max(0, Math.min(100, Number(v) || 0)) : v } : b));
+  const delBucket = (id) => setBuckets(buckets.filter(b => b.id !== id));
   return (
     <div className="soli-page soli-narrow">
       <h1 className="soli-h1">Settings</h1>
@@ -1073,6 +1250,13 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         {email && <p className="soli-help">Signed in as {email}</p>}
       </div>
 
+      <Field label="Your specialty">
+        <select className="soli-input" value={settings.specialty || ""} onChange={e => saveSettings({ ...settings, specialty: e.target.value })}>
+          <option value="">Not set (show all products)</option>
+          {SPECIALTIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <p className="soli-help">Filters your product list when logging and picks the right starter products. You can always switch to view all.</p>
+      </Field>
       <Field label="Currency">
         <select className="soli-input" value={settings.currency || "USD"}
           onChange={e => saveSettings({ ...settings, currency: e.target.value })}>
@@ -1080,16 +1264,50 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </select>
         <p className="soli-help">The symbol shown on every figure in Soli. Your Soli subscription is billed separately by Stripe in USD.</p>
       </Field>
-      <Field label={`Booth rent, cost per hour (${curSymbol(settings.currency)})`}>
-        <input className="soli-input" type="number" value={settings.boothRentHourly}
-          onChange={e => saveSettings({ ...settings, boothRentHourly: Number(e.target.value) })} />
-        <p className="soli-help">The engine behind every profit number. Set it to your real chair/booth cost, or 0 if you don't pay rent.</p>
+      <Field label="Booth rent">
+        <div className="soli-seg">
+          {[["hour", "Per hour"], ["week", "Per week"], ["month", "Per month"]].map(([k, lbl]) => (
+            <button key={k} type="button" className={"soli-segbtn" + (bUnit === k ? " on" : "")} onClick={() => setBooth({ boothRentUnit: k })}>{lbl}</button>
+          ))}
+        </div>
+        <input className="soli-input" type="number" style={{ marginTop: 10 }} placeholder={`Amount (${curSymbol(settings.currency)})`}
+          value={bUnit === "hour" ? (settings.boothRentAmount ?? settings.boothRentHourly ?? "") : (settings.boothRentAmount ?? "")}
+          onChange={e => setBooth({ boothRentAmount: e.target.value })} />
+        {bUnit !== "hour" && (
+          <input className="soli-input" type="number" placeholder="Hours you work per week"
+            value={settings.boothRentHoursPerWeek || ""} onChange={e => setBooth({ boothRentHoursPerWeek: e.target.value })} />
+        )}
+        <p className="soli-help">
+          {bUnit === "hour"
+            ? "The rate behind every profit number. Set 0 if you don't pay booth rent."
+            : (Number(settings.boothRentAmount) > 0 && Number(settings.boothRentHoursPerWeek) > 0
+              ? `Soli uses ${money2(boothHourly(settings))}/hr in profit math` + (bUnit === "week" ? ` (≈ ${money2(Number(settings.boothRentAmount) * 52 / 12)}/month)` : ` (≈ ${money2(Number(settings.boothRentAmount) * 12 / 52)}/week)`)
+              : "Enter the amount and your hours per week, and Soli converts it to an hourly rate for profit math.")}
+        </p>
       </Field>
       <Field label="Tax set-aside (%)">
         <input className="soli-input" type="number" value={settings.taxRate}
           onChange={e => saveSettings({ ...settings, taxRate: Number(e.target.value) })} />
         <p className="soli-help">Self-employed? 25 to 30% is a safe starting point (income plus about 15.3% self-employment tax). Ask a tax pro for your exact number.</p>
       </Field>
+
+      <div className="soli-datatools">
+        <div className="soli-datahead">Savings set-asides</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Optional buckets to remind yourself to set aside part of what you keep. These are your own suggestions, not financial advice. Amounts show on your dashboard.</p>
+        {buckets.map(b => (
+          <div className="soli-bucketrow" key={b.id}>
+            <input className="soli-input slim" value={b.name} onChange={e => updBucket(b.id, "name", e.target.value)} />
+            <div className="soli-bucketpct"><input className="soli-input slim" type="number" value={b.pct} onChange={e => updBucket(b.id, "pct", e.target.value)} /><span>%</span></div>
+            <button className="soli-iconbtn" onClick={() => delBucket(b.id)}><Trash2 size={15} /></button>
+          </div>
+        ))}
+        <div className="soli-bucketadd">
+          {[["Taxes", 30], ["Retirement", 10], ["Own business", 20], ["Vacation", 10]].map(([n, p]) => (
+            <button key={n} type="button" className="soli-tradebtn" onClick={() => addBucket(n, p)}>+ {n} {p}%</button>
+          ))}
+          <button type="button" className="soli-tradebtn" onClick={() => addBucket("Savings", 10)}>+ Custom</button>
+        </div>
+      </div>
 
       <div className="soli-datatools">
         <div className="soli-datahead">Your data</div>
@@ -1294,7 +1512,7 @@ function Styles() {
 .soli-editbtn:hover{border-color:var(--clay);color:var(--ink)}
 
 .soli-invtable{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:8px 12px;margin-bottom:20px;overflow-x:auto}
-.soli-invhead,.soli-invrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:430px}
+.soli-invhead,.soli-invrow{display:grid;grid-template-columns:1.8fr 1fr 1fr .9fr 1.2fr 34px;gap:8px;align-items:center;min-width:520px}
 .soli-import{margin-bottom:20px}
 .soli-importtoggle{width:100%;border:1px dashed var(--line);background:var(--surface2);color:var(--clay-d);font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-importtoggle:hover{border-color:var(--clay)}
@@ -1337,6 +1555,22 @@ function Styles() {
 .soli-addbox{background:var(--surface2);border:1px dashed var(--line);border-radius:15px;padding:18px}
 .soli-addhead{font-weight:600;font-size:14px;margin-bottom:12px}
 .soli-help{font-size:12px;color:var(--ink2);margin-top:8px}
+.soli-linkbtn{background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:inherit;font-weight:600;color:var(--clay-d)}
+.soli-linkbtn:hover{text-decoration:underline}
+.soli-weektable{overflow-x:auto}
+.soli-weekhead,.soli-weekrow{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr .9fr;gap:8px;align-items:center;min-width:440px}
+.soli-weekhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
+.soli-weekrow{padding:11px 4px;border-bottom:1px solid var(--line);font-size:14px}
+.soli-weekrow:last-child{border-bottom:none}
+.soli-weekname{display:flex;flex-direction:column;font-weight:500}
+.soli-weekname small{font-weight:400;color:var(--ink2);font-size:11.5px}
+.soli-weekcost{color:var(--cost)}
+.soli-weekkept{font-family:'Fraunces',serif;font-weight:600;color:var(--profit)}
+.soli-bucketrow{display:grid;grid-template-columns:1fr 92px 34px;gap:8px;align-items:center;margin-bottom:8px}
+.soli-bucketpct{display:flex;align-items:center;gap:5px}
+.soli-bucketpct .soli-input{margin:0}
+.soli-bucketpct span{color:var(--ink2);font-size:13px}
+.soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .soli-appfoot{max-width:920px;margin:0 auto;padding:20px 22px 40px;text-align:center;font-size:13px;color:var(--ink2)}
 .soli-appfoot a{color:var(--clay-d);font-weight:600;text-decoration:none}
 .soli-appfoot a:hover{text-decoration:underline}
