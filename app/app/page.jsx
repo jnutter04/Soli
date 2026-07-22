@@ -194,6 +194,7 @@ export default function Soli() {
   const [plan, setPlan] = useState(DEFAULT_PLAN);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [subStatus, setSubStatus] = useState(null);
+  const [comped, setComped] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
 
   useEffect(() => {
@@ -216,6 +217,11 @@ export default function Soli() {
         let { settings: s, clients: c, products: pr, logs: lg, plan: pl, demo_seeded,
           trial_ends_at: trialEnd, subscription_status: sub } = row;
         s = s || DEFAULT_SETTINGS; c = c || []; pr = pr || []; lg = lg || []; pl = pl || DEFAULT_PLAN;
+        // Read comp status separately so a missing column (before the migration) never breaks the app.
+        try {
+          const { data: cr } = await supabase.from("user_state").select("comped").eq("user_id", user.id).maybeSingle();
+          setComped(!!(cr && cr.comped));
+        } catch { /* comped column not added yet */ }
 
         // "Try it with sample data" deep-link (/app?demo=1). Seeds at most once,
         // and only when the account has no data yet, so it never overwrites real work.
@@ -280,6 +286,14 @@ export default function Soli() {
     } catch { alert("Could not open billing."); }
     setBillingBusy(false);
   };
+  const redeemCode = async (code) => {
+    try {
+      const res = await fetch("/api/redeem", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+      const d = await res.json();
+      if (d.ok) { setComped(true); return { ok: true }; }
+      return { ok: false, error: d.error || "That code isn't valid." };
+    } catch { return { ok: false, error: "Something went wrong. Try again." }; }
+  };
 
   const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
   const saveClients = (v) => { setClients(v); if (userId) saveField(supabase, userId, "clients", v); };
@@ -319,7 +333,7 @@ export default function Soli() {
   const msLeft = trialEndsAt ? new Date(trialEndsAt).getTime() - Date.now() : 0;
   const inTrial = msLeft > 0;
   const trialDaysLeft = Math.max(0, Math.ceil(msLeft / 864e5));
-  const hasAccess = isSubscribed || inGrace || inTrial;
+  const hasAccess = comped || isSubscribed || inGrace || inTrial;
 
   const nav = [
     { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
@@ -347,7 +361,7 @@ export default function Soli() {
     <div className="soli-root soli-center"><Styles /><div className="soli-loadmark"><Sun size={26} strokeWidth={1.6} /></div></div>
   );
 
-  if (!hasAccess) return <Paywall email={email} onSubscribe={goCheckout} onSignOut={signOut} busy={billingBusy} />;
+  if (!hasAccess) return <Paywall email={email} onSubscribe={goCheckout} onSignOut={signOut} busy={billingBusy} onRedeem={redeemCode} />;
 
   return (
     <div className="soli-root">
@@ -374,7 +388,7 @@ export default function Soli() {
       </header>
 
       <main className="soli-main">
-        {!isSubscribed && !inGrace && inTrial && (
+        {!comped && !isSubscribed && !inGrace && inTrial && (
           <div className="soli-trialbar">
             <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in your free trial</span>
             <button onClick={goCheckout} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
@@ -395,7 +409,8 @@ export default function Soli() {
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
-          isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email} />}
+          isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
+          comped={comped} onRedeem={redeemCode} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -1215,9 +1230,11 @@ function Inventory({ products, saveProducts, specialty }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem }) {
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
+  const [pcode, setPcode] = useState(""); const [predeeming, setPredeeming] = useState(false); const [perr, setPerr] = useState("");
+  const doRedeem = async () => { setPerr(""); setPredeeming(true); const r = await onRedeem(pcode.trim()); if (!r.ok) setPerr(r.error); setPredeeming(false); };
   const bUnit = settings.boothRentUnit || "hour";
   const setBooth = (patch) => { const next = { ...settings, ...patch }; next.boothRentHourly = boothHourly(next); saveSettings(next); };
   const buckets = settings.buckets || [];
@@ -1231,7 +1248,12 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
 
       <div className="soli-billing">
         <div className="soli-datahead">Your plan</div>
-        {isSubscribed ? (
+        {comped ? (
+          <>
+            <div className="soli-planline"><span className="soli-planbadge on">Complimentary</span><span>Free access</span></div>
+            <p className="soli-help">You have complimentary access to Soli Pro. Enjoy, and thank you.</p>
+          </>
+        ) : isSubscribed ? (
           <>
             <div className="soli-planline"><span className="soli-planbadge on">Soli Pro</span><span>Active · $12/mo</span></div>
             <p className="soli-help">Thanks for subscribing. Manage your card, invoices, or cancel anytime.</p>
@@ -1245,6 +1267,11 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
             </div>
             <p className="soli-help">Keep your numbers, tax jar, and profit tracking going for $12/mo after your trial.</p>
             <button className="soli-cta sm" onClick={onSubscribe} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
+            <div className="soli-promo" style={{ marginTop: 10 }}>
+              <input className="soli-input" placeholder="Promo code" value={pcode} onChange={e => { setPcode(e.target.value); setPerr(""); }} onKeyDown={e => { if (e.key === "Enter" && pcode.trim()) doRedeem(); }} />
+              <button className="soli-ghost" onClick={doRedeem} disabled={predeeming || !pcode.trim()}>{predeeming ? "Checking…" : "Redeem"}</button>
+            </div>
+            {perr && <p className="soli-help" style={{ color: "var(--clay-d)" }}>{perr}</p>}
           </>
         )}
         {email && <p className="soli-help">Signed in as {email}</p>}
@@ -1320,7 +1347,16 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
 }
 
 /* ------------------------------- PAYWALL --------------------------------- */
-function Paywall({ email, onSubscribe, onSignOut, busy }) {
+function Paywall({ email, onSubscribe, onSignOut, busy, onRedeem }) {
+  const [showCode, setShowCode] = useState(false);
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [err, setErr] = useState("");
+  const redeem = async () => {
+    setErr(""); setRedeeming(true);
+    const r = await onRedeem(code.trim());
+    if (!r.ok) { setErr(r.error); setRedeeming(false); } // on success the app unmounts the paywall
+  };
   return (
     <div className="soli-root soli-center">
       <Styles />
@@ -1331,6 +1367,15 @@ function Paywall({ email, onSubscribe, onSignOut, busy }) {
         <div className="soli-payprice"><b>$12</b> / month</div>
         <button className="soli-cta" onClick={onSubscribe} disabled={busy}>{busy ? "One moment…" : "Subscribe & keep going"}</button>
         <p className="soli-paynote">Your data is safe and waiting. Subscribing brings it right back.</p>
+        {!showCode ? (
+          <button className="soli-linkbtn" style={{ marginTop: 2 }} onClick={() => setShowCode(true)}>Have a promo code?</button>
+        ) : (
+          <div className="soli-promo">
+            <input className="soli-input" placeholder="Enter your code" value={code} onChange={e => { setCode(e.target.value); setErr(""); }} onKeyDown={e => { if (e.key === "Enter" && code.trim()) redeem(); }} />
+            <button className="soli-ghost" onClick={redeem} disabled={redeeming || !code.trim()}>{redeeming ? "Checking…" : "Redeem"}</button>
+          </div>
+        )}
+        {err && <p className="soli-paynote" style={{ color: "var(--clay-d)" }}>{err}</p>}
         <button className="soli-navbtn soli-signout" style={{ margin: "6px auto 0" }} onClick={onSignOut}><LogOut size={16} /> Sign out</button>
         {email && <p className="soli-paynote">Signed in as {email}</p>}
       </div>
@@ -1557,6 +1602,9 @@ function Styles() {
 .soli-help{font-size:12px;color:var(--ink2);margin-top:8px}
 .soli-linkbtn{background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:inherit;font-weight:600;color:var(--clay-d)}
 .soli-linkbtn:hover{text-decoration:underline}
+.soli-promo{display:flex;gap:8px;align-items:stretch}
+.soli-promo .soli-input{margin:0}
+.soli-promo .soli-ghost{width:auto;white-space:nowrap;padding:12px 18px}
 .soli-weektable{overflow-x:auto}
 .soli-weekhead,.soli-weekrow{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr .9fr;gap:8px;align-items:center;min-width:440px}
 .soli-weekhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
