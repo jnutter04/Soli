@@ -1317,6 +1317,12 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
           onChange={e => saveSettings({ ...settings, taxRate: Number(e.target.value) })} />
         <p className="soli-help">Self-employed? 25 to 30% is a safe starting point (income plus about 15.3% self-employment tax). Ask a tax pro for your exact number.</p>
       </Field>
+      <Field label="Weekly recap email">
+        <label className="soli-toggle">
+          <input type="checkbox" checked={settings.weeklyRecap !== false} onChange={e => saveSettings({ ...settings, weeklyRecap: e.target.checked })} />
+          <span>Email me a short summary of what I kept each week.</span>
+        </label>
+      </Field>
 
       <div className="soli-datatools">
         <div className="soli-datahead">Savings set-asides</div>
@@ -1619,6 +1625,8 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-toggle{display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink2);line-height:1.45}
+.soli-toggle input{width:18px;height:18px;flex:none;margin-top:1px;accent-color:var(--clay);cursor:pointer}
 .soli-appfoot{max-width:920px;margin:0 auto;padding:20px 22px 40px;text-align:center;font-size:13px;color:var(--ink2)}
 .soli-appfoot a{color:var(--clay-d);font-weight:600;text-decoration:none}
 .soli-appfoot a:hover{text-decoration:underline}
