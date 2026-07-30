@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe, PRICE_ID } from "@/lib/stripe";
+import { sendAlert } from "@/lib/alert";
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,11 @@ export async function POST(request) {
     return NextResponse.json({ url: session.url });
   } catch (e) {
     console.error("checkout error:", e);
+    await sendAlert({
+      source: "checkout",
+      message: "Checkout failed to start",
+      detail: (e?.stack || e?.message || String(e)) + "\n\nA user could not subscribe. Check STRIPE_SECRET_KEY / STRIPE_PRICE_ID mode match.",
+    });
     return NextResponse.json({ error: e.message || "Checkout failed." }, { status: 500 });
   }
 }

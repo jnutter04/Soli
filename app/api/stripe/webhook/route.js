@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendAlert } from "@/lib/alert";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,11 @@ export async function POST(request) {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error("Webhook signature verification failed:", err.message);
+    await sendAlert({
+      source: "stripe webhook",
+      message: "Webhook signature verification failed",
+      detail: err.message + "\n\nUsually means STRIPE_WEBHOOK_SECRET does not match the endpoint, or test/live mode is mixed.",
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -61,6 +67,11 @@ export async function POST(request) {
     }
   } catch (e) {
     console.error("Webhook handling error:", e);
+    await sendAlert({
+      source: "stripe webhook",
+      message: `Failed to handle ${event?.type || "event"}`,
+      detail: (e?.stack || e?.message || String(e)) + "\n\nA subscription may not have been recorded. Check Stripe > Webhooks > Event deliveries.",
+    });
     return NextResponse.json({ error: "Handler error" }, { status: 500 });
   }
 
