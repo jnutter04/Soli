@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift, Receipt
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -103,6 +103,22 @@ function profitOf(log, rent) {
    so each user works entirely from their own real numbers. */
 const DEFAULT_SETTINGS = { boothRentHourly: 12, taxRate: 30 };
 const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 };
+
+/* Business overhead categories. These are costs that are not tied to one
+   service, so they never touch profitOf. Folding them into per-service profit
+   would distort which services are actually worth doing. */
+const EXPENSE_CATEGORIES = [
+  "Booth or chair rent",
+  "Supplies",
+  "Mileage and travel",
+  "Insurance",
+  "Software and subscriptions",
+  "Education and training",
+  "Licensing and fees",
+  "Marketing",
+  "Other",
+];
+const RENT_CATEGORY = "Booth or chair rent";
 
 /* Specialties (for the product filter + starter products). */
 const SPECIALTIES = [
@@ -205,6 +221,8 @@ export default function Soli() {
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [subStatus, setSubStatus] = useState(null);
   const [comped, setComped] = useState(false);
+  const [expenses, setExpenses] = useState([]);
+  const [expensesReady, setExpensesReady] = useState(true);
   const [billingBusy, setBillingBusy] = useState(false);
 
   useEffect(() => {
@@ -232,6 +250,15 @@ export default function Soli() {
           const { data: cr } = await supabase.from("user_state").select("comped").eq("user_id", user.id).maybeSingle();
           setComped(!!(cr && cr.comped));
         } catch { /* comped column not added yet */ }
+        // Same for expenses, read on its own so a missing column never breaks the app.
+        // Supabase resolves with an error object rather than throwing, so the error
+        // has to be checked explicitly. Getting this wrong would show a working form
+        // whose entries silently vanish on the next load.
+        try {
+          const { data: er, error: eErr } = await supabase.from("user_state").select("expenses").eq("user_id", user.id).maybeSingle();
+          if (eErr) { setExpensesReady(false); }
+          else { setExpenses(Array.isArray(er?.expenses) ? er.expenses : []); setExpensesReady(true); }
+        } catch { setExpensesReady(false); }
 
         // "Try it with sample data" deep-link (/app?demo=1). Seeds at most once,
         // and only when the account has no data yet, so it never overwrites real work.
@@ -338,6 +365,7 @@ export default function Soli() {
   const saveProducts = (v) => { setProducts(v); if (userId) saveField(supabase, userId, "products", v); };
   const saveSettings = (v) => { setSettings(v); if (userId) saveField(supabase, userId, "settings", v); };
   const savePlan = (v) => { setPlan(v); if (userId) saveField(supabase, userId, "plan", v); };
+  const saveExpenses = (v) => { setExpenses(v); if (userId) saveField(supabase, userId, "expenses", v); };
 
   // Service templates live inside the settings blob (no schema change needed).
   const templates = settings.templates || [];
@@ -393,6 +421,7 @@ export default function Soli() {
     { id: "plan", label: "What to charge", Icon: Calculator },
     { id: "clients", label: "Clients", Icon: Users },
     { id: "inv", label: "Inventory", Icon: Package },
+    { id: "exp", label: "Expenses", Icon: Receipt },
     { id: "settings", label: "Settings", Icon: SettingsIcon },
   ];
 
@@ -467,10 +496,11 @@ export default function Soli() {
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
+        {tab === "exp" && <ExpensesView expenses={expenses} saveExpenses={saveExpenses} ready={expensesReady} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
           comped={comped} onRedeem={redeemCode}
-          logs={logs} clients={clients} rent={rent} onDeleteAccount={deleteAccount} />}
+          logs={logs} clients={clients} rent={rent} expenses={expenses} onDeleteAccount={deleteAccount} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -1527,7 +1557,7 @@ function Inventory({ products, saveProducts, specialty }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, onDeleteAccount }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], onDeleteAccount }) {
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState("");
   const [delBusy, setDelBusy] = useState(false);
@@ -1630,7 +1660,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </label>
       </Field>
 
-      <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} />
+      <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
 
       <ReferralPanel />
 
@@ -1773,6 +1803,118 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
   );
 }
 
+/* ------------------------------- EXPENSES -------------------------------- */
+/* Overhead the business carries regardless of any single service. Deliberately
+   kept out of profitOf so per-service comparisons stay meaningful, and folded
+   in only at the business level (dashboard totals and the tax summary). */
+function ExpensesView({ expenses, saveExpenses, ready }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState("");
+  const [editing, setEditing] = useState(null);
+
+  const add = () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+    saveExpenses([{ id: uid(), date: new Date(date + "T12:00:00").toISOString(), category, note: note.trim(), amount: round2(amt) }, ...expenses]);
+    setNote(""); setAmount(""); setDate(today);
+  };
+  const upd = (id, key, v) => saveExpenses(expenses.map((e) => e.id === id ? { ...e, [key]: key === "amount" ? round2(Number(v) || 0) : v } : e));
+  const del = (id) => saveExpenses(expenses.filter((e) => e.id !== id));
+  const repeat = (e) => saveExpenses([{ ...e, id: uid(), date: new Date().toISOString() }, ...expenses]);
+
+  const sorted = useMemo(() => [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date)), [expenses]);
+  const thisMonth = useMemo(() => {
+    const d = new Date(); const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    return expenses.filter((e) => new Date(e.date).getTime() >= start).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [expenses]);
+  const thisYear = useMemo(() => {
+    const y = new Date().getFullYear();
+    return expenses.filter((e) => new Date(e.date).getFullYear() === y).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [expenses]);
+
+  if (!ready) {
+    return (
+      <div className="soli-page">
+        <h1 className="soli-h1">Expenses</h1>
+        <p className="soli-sub">Track the costs that are not tied to one service.</p>
+        <div className="soli-empty">
+          <span className="soli-emptymark"><Receipt size={26} strokeWidth={1.8} /></span>
+          <h2>Almost ready</h2>
+          <p>Expenses need one quick database update before they can save. Once that is done, this page starts working straight away.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="soli-page">
+      <h1 className="soli-h1">Expenses</h1>
+      <p className="soli-sub">Rent, supplies, mileage, insurance and anything else the business pays for.</p>
+      <p className="soli-help" style={{ marginTop: 0, marginBottom: 16 }}>
+        These are business costs, not per-service costs, so they do not change your profit per service. They come off your totals and feed the year-end tax summary. Product used on a client belongs in <b>Inventory</b> instead.
+      </p>
+
+      <div className="soli-cards" style={{ marginBottom: 20 }}>
+        <Stat label="This month" value={money2(thisMonth)} tone="cost" />
+        <Stat label="This year" value={money2(thisYear)} tone="cost" />
+      </div>
+
+      <div className="soli-addbox" style={{ marginBottom: 20 }}>
+        <div className="soli-addhead">Add an expense</div>
+        <div className="soli-exprow">
+          <input className="soli-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <select className="soli-input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input className="soli-input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="soli-input" type="number" inputMode="decimal" placeholder={`Amount ${CUR}`} value={amount}
+            onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        </div>
+        <button className="soli-cta sm" onClick={add} disabled={!Number(amount)}>Add expense</button>
+      </div>
+
+      {sorted.length === 0 ? (
+        <p className="soli-emptyhint" style={{ textAlign: "left" }}>No expenses yet. Add your booth rent to start, since it is usually the biggest one.</p>
+      ) : (
+        <div className="soli-invtable">
+          <div className="soli-exphead"><span>Date</span><span>Category</span><span>Note</span><span>Amount</span><span></span></div>
+          {sorted.map((e) => (
+            <div className="soli-exprowline" key={e.id}>
+              {editing === e.id ? (
+                <>
+                  <input className="soli-input slim" type="date" value={new Date(e.date).toISOString().slice(0, 10)}
+                    onChange={(ev) => upd(e.id, "date", new Date(ev.target.value + "T12:00:00").toISOString())} />
+                  <select className="soli-input slim" value={e.category} onChange={(ev) => upd(e.id, "category", ev.target.value)}>
+                    {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input className="soli-input slim" value={e.note || ""} onChange={(ev) => upd(e.id, "note", ev.target.value)} />
+                  <input className="soli-input slim" type="number" value={e.amount} onChange={(ev) => upd(e.id, "amount", ev.target.value)} />
+                  <button className="soli-editbtn" onClick={() => setEditing(null)}>Done</button>
+                </>
+              ) : (
+                <>
+                  <span className="soli-expdate">{fmtDate(e.date)}</span>
+                  <span>{e.category}</span>
+                  <span className="soli-expnote">{e.note || ""}</span>
+                  <span className="soli-expamt">{money2(e.amount)}</span>
+                  <span className="soli-expactions">
+                    <button className="soli-linkbtn" onClick={() => setEditing(e.id)}>Edit</button>
+                    <button className="soli-linkbtn" onClick={() => repeat(e)} title="Add the same expense again, dated today">Repeat</button>
+                    <button className="soli-iconbtn" onClick={() => del(e.id)}><Trash2 size={15} /></button>
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ----------------------------- TAX EXPORT -------------------------------- */
 /* Note on tips: profitOf deliberately excludes them so services can be compared
    fairly. Tips are still income, so the tax figures here add them back. Using
@@ -1792,16 +1934,24 @@ const download = (name, text) => {
 const ymd = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const round2 = (n) => Math.round(n * 100) / 100;
 
-function TaxExport({ logs, clients, settings, rent, taxRate }) {
+function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
   const years = useMemo(() => {
-    const set = new Set((logs || []).map((l) => new Date(l.date).getFullYear()));
+    const set = new Set([
+      ...(logs || []).map((l) => new Date(l.date).getFullYear()),
+      ...(expenses || []).map((e) => new Date(e.date).getFullYear()),
+    ]);
     return [...set].sort((a, b) => b - a);
-  }, [logs]);
+  }, [logs, expenses]);
   const [year, setYear] = useState(years[0] || new Date().getFullYear());
   useEffect(() => { if (years.length && !years.includes(year)) setYear(years[0]); }, [years, year]);
 
   const nameOf = (id) => (clients.find((c) => c.id === id) || {}).name || "";
   const rows = useMemo(() => (logs || []).filter((l) => new Date(l.date).getFullYear() === year), [logs, year]);
+
+  const expRows = useMemo(
+    () => (expenses || []).filter((e) => new Date(e.date).getFullYear() === year),
+    [expenses, year]
+  );
 
   const t = useMemo(() => {
     let revenue = 0, tips = 0, product = 0, booth = 0, minutes = 0;
@@ -1813,11 +1963,28 @@ function TaxExport({ logs, clients, settings, rent, taxRate }) {
       booth += b;
       minutes += Number(l.durationMin) || 0;
     });
-    const gross = revenue + tips;             // tips are income
-    const expenses = product + booth;
-    const net = gross - expenses;
-    return { revenue, tips, product, booth, minutes, gross, expenses, net, setAside: net * (taxRate / 100) };
-  }, [rows, rent, taxRate]);
+
+    // Group logged overhead by category.
+    const byCat = {};
+    expRows.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + (Number(e.amount) || 0); });
+    const overhead = Object.values(byCat).reduce((s, v) => s + v, 0);
+    const rentPaid = byCat[RENT_CATEGORY] || 0;
+
+    // Booth time is an allocation used for per-service pricing, not a real
+    // second payment. If actual rent has been logged, counting both would
+    // deduct the same cost twice, so the allocation is dropped here.
+    const rentLogged = rentPaid > 0;
+    const boothCounted = rentLogged ? 0 : booth;
+
+    const gross = revenue + tips;            // tips are income
+    const deductions = product + boothCounted + overhead;
+    const net = gross - deductions;
+    return {
+      revenue, tips, product, booth, minutes, gross, net,
+      byCat, overhead, rentLogged, boothCounted, deductions,
+      setAside: net * (taxRate / 100),
+    };
+  }, [rows, expRows, rent, taxRate]);
 
   if (years.length === 0) {
     return (
@@ -1855,20 +2022,24 @@ function TaxExport({ logs, clients, settings, rent, taxRate }) {
       ["Tips", round2(t.tips)],
       ["Gross income", round2(t.gross)],
       [],
-      ["EXPENSES (from your entries)"],
-      ["Product cost", round2(t.product)],
-      ["Booth time allocated to services", round2(t.booth)],
-      ["Total expenses", round2(t.expenses)],
+      ["DEDUCTIONS (from your entries)"],
+      ["Product used on clients", round2(t.product)],
+      ...EXPENSE_CATEGORIES.filter((c) => t.byCat[c]).map((c) => [c, round2(t.byCat[c])]),
+      ...(t.rentLogged ? [] : [["Booth time allocated to services", round2(t.boothCounted)]]),
+      ["Total deductions", round2(t.deductions)],
       [],
       ["Net profit before tax", round2(t.net)],
       [`Set aside at your ${taxRate}% rate`, round2(t.setAside)],
       [],
       ["Services logged", rows.length],
       ["Hours in chair", round2(t.minutes / 60)],
+      ["Expense entries", expRows.length],
       [],
       ["Note", "Prepared from figures entered by the user. Not tax advice and not a filed return."],
-      ["Note", "Booth time is hours worked times the hourly rate in Settings. If rent is paid as a flat amount, use the actual amount paid."],
-      ["Note", "Other deductible costs such as supplies, mileage, insurance and software are not tracked here."],
+      t.rentLogged
+        ? ["Note", `Booth rent uses the ${money2(t.byCat[RENT_CATEGORY])} actually logged as an expense. The hourly booth-time allocation used for per-service pricing (${money2(t.booth)}) is excluded here so the same cost is not deducted twice.`]
+        : ["Note", `No booth rent was logged as an expense, so booth time is estimated as hours worked times the hourly rate in Settings (${money2(t.booth)}). If you pay rent, log the actual amounts under Expenses for a more accurate figure.`],
+      ["Note", "Only costs you have entered are included. Anything not logged, such as mileage or insurance, is missing from this summary."],
     ];
     download(`soli-tax-summary-${year}.csv`, toCsv(out));
   };
@@ -1886,10 +2057,16 @@ function TaxExport({ logs, clients, settings, rent, taxRate }) {
 
       <div className="soli-taxgrid">
         <div><span>Gross income</span><b>{money2(t.gross)}</b></div>
-        <div><span>Expenses</span><b className="cost">{money2(t.expenses)}</b></div>
+        <div><span>Deductions</span><b className="cost">{money2(t.deductions)}</b></div>
         <div><span>Net before tax</span><b className="profit">{money2(t.net)}</b></div>
         <div><span>Set aside ({taxRate}%)</span><b>{money2(t.setAside)}</b></div>
       </div>
+
+      {t.rentLogged && (
+        <p className="soli-help">
+          Using the {money2(t.byCat[RENT_CATEGORY])} of booth rent you logged, rather than the {money2(t.booth)} hourly allocation, so the same cost is not counted twice.
+        </p>
+      )}
 
       <div className="soli-refactions" style={{ marginTop: 12 }}>
         <button className="soli-cta sm" onClick={exportSummary}>Download summary</button>
@@ -2342,6 +2519,17 @@ function Styles() {
 .soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-exprow{display:grid;grid-template-columns:150px 1.2fr 1.4fr 130px;gap:10px;margin-bottom:10px}
+@media(max-width:640px){.soli-exprow{grid-template-columns:1fr 1fr}}
+.soli-exprow .soli-input{margin:0}
+.soli-exphead,.soli-exprowline{display:grid;grid-template-columns:96px 1.3fr 1.4fr 110px 150px;gap:8px;align-items:center;min-width:600px}
+.soli-exphead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
+.soli-exprowline{padding:9px 4px;border-bottom:1px solid var(--line);font-size:13.5px}
+.soli-exprowline:last-child{border-bottom:none}
+.soli-expdate{color:var(--ink2);font-size:12.5px}
+.soli-expnote{color:var(--ink2)}
+.soli-expamt{font-family:'Fraunces',serif;font-weight:600;color:var(--cost)}
+.soli-expactions{display:flex;align-items:center;gap:10px;justify-content:flex-end}
 .soli-goal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
 .soli-goal.met{border-color:#D3DBBC;background:linear-gradient(150deg,#EDF0E2,#E6EBD8)}
 [data-theme="dark"] .soli-goal.met{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
