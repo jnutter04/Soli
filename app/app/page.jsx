@@ -1414,6 +1414,30 @@ function Planner({ plan, savePlan, taxRate }) {
 }
 
 /* ------------------------------- CLIENTS --------------------------------- */
+/* Works out each client's own rhythm from their visit history, rather than the
+   rebook weeks field, which most people leave on the default. Uses the median
+   gap so one long break (a holiday, an illness) does not skew their normal.
+   Needs three visits, since two gives a single gap and no sense of typical. */
+function riskFor(clientLogs) {
+  const dates = clientLogs.map((l) => new Date(l.date).getTime()).sort((a, b) => a - b);
+  if (dates.length < 3) return null;
+  const gaps = [];
+  for (let i = 1; i < dates.length; i++) gaps.push(dates[i] - dates[i - 1]);
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  const medianGap = gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+  const usualDays = medianGap / 864e5;
+  if (usualDays < 1) return null;
+  const sinceDays = (Date.now() - dates[dates.length - 1]) / 864e5;
+  const ratio = sinceDays / usualDays;
+  // Bounds are checked before grading, so someone long gone cannot fall through
+  // and be labelled a mild "watch". Under 1.4x is a normal wobble; past 3.5x
+  // they have most likely moved on and calling that "slipping" would mislead.
+  if (ratio < 1.4 || ratio >= 3.5) return null;
+  const level = ratio >= 2 ? "high" : "watch";
+  return { usualDays: Math.round(usualDays), sinceDays: Math.round(sinceDays), ratio, level };
+}
+
 function ClientsView({ clients, logs, saveClients, rent }) {
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -1425,6 +1449,21 @@ function ClientsView({ clients, logs, saveClients, rent }) {
   };
   const remove = (id) => { saveClients(clients.filter(c => c.id !== id)); setOpen(null); };
   const startEdit = (c) => { setEditing(c.id); setForm({ name: c.name, phone: c.phone || "", notes: c.notes || "", rebookWeeks: c.rebookWeeks || 4 }); };
+
+  // Clients drifting past their own normal rhythm, worst first, weighted by what
+  // an average visit from them is worth so the costly ones surface first.
+  const slipping = useMemo(() => {
+    return clients
+      .map((c) => {
+        const ls = logs.filter((l) => l.clientId === c.id);
+        const risk = riskFor(ls);
+        if (!risk) return null;
+        const perVisit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0) / ls.length;
+        return { ...c, risk, perVisit, visits: ls.length };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.risk.ratio * Math.max(b.perVisit, 1)) - (a.risk.ratio * Math.max(a.perVisit, 1)));
+  }, [clients, logs, rent]);
   const saveEdit = (id) => {
     saveClients(clients.map(c => c.id === id ? {
       ...c,
@@ -1441,6 +1480,32 @@ function ClientsView({ clients, logs, saveClients, rent }) {
       <h1 className="soli-h1">Clients</h1>
       <p className="soli-sub">{clients.length} clients · ranked by lifetime profit</p>
       {clients.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0 }}>No clients yet. They're added automatically when you log a service. Just type a new name on the <b>Log service</b> screen.</p>}
+
+      {slipping.length > 0 && (
+        <section className="soli-block soli-watch">
+          <div className="soli-blockhead"><AlertTriangle size={18} strokeWidth={1.9} /><h2>Slipping away</h2></div>
+          <p className="soli-note">
+            Regulars who have gone quiet for longer than they normally do. Based on their own visit history, not a fixed schedule.
+          </p>
+          {slipping.map((c) => (
+            <div className="soli-sliprow" key={c.id}>
+              <div>
+                <div className="soli-duename">
+                  {c.name} {c.risk.level === "high" && <span className="soli-sliptag">overdue</span>}
+                </div>
+                <div className="soli-duemeta">
+                  usually every {c.risk.usualDays} days, last seen {c.risk.sinceDays} days ago
+                  {c.perVisit > 0 ? ` · about ${money2(c.perVisit)} a visit` : ""}
+                </div>
+              </div>
+              {c.phone
+                ? <a className="soli-textlink" href={"sms:" + c.phone.replace(/[^0-9+]/g, "")}>Text</a>
+                : <span className="soli-dueskip">no phone saved</span>}
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="soli-clientlist">
         {clients.map(c => ({ ...c, s: stats(c.id) })).sort((a, b) => b.s.profit - a.s.profit).map(c => (
           <div key={c.id} className="soli-clientcard" onClick={() => setOpen(open === c.id ? null : c.id)}>
@@ -2519,6 +2584,11 @@ function Styles() {
 .soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-sliprow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #EDD8C8}
+.soli-sliprow:first-of-type{border-top:none}
+[data-theme="dark"] .soli-sliprow{border-top-color:#3f3025}
+.soli-sliptag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--clay);padding:2px 7px;border-radius:20px;vertical-align:middle;margin-left:6px}
+.soli-dueskip{font-size:12px;color:var(--ink2)}
 .soli-exprow{display:grid;grid-template-columns:150px 1.2fr 1.4fr 130px;gap:10px;margin-bottom:10px}
 @media(max-width:640px){.soli-exprow{grid-template-columns:1fr 1fr}}
 .soli-exprow .soli-input{margin:0}
