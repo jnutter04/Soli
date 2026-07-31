@@ -296,10 +296,14 @@ export default function Soli() {
     })();
   }, [supabase, router]);
 
-  const goCheckout = async () => {
+  const goCheckout = async (plan = "monthly") => {
     setBillingBusy(true);
     try {
-      const res = await fetch("/api/checkout", { method: "POST" });
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
       const data = await res.json();
       if (data.url) { window.location.href = data.url; return; }
       alert(data.error || "Could not start checkout.");
@@ -438,7 +442,7 @@ export default function Soli() {
         {!comped && !isSubscribed && !inGrace && inTrial && (
           <div className="soli-trialbar">
             <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in your free trial</span>
-            <button onClick={goCheckout} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
+            <button onClick={() => setTab("settings")}>See plans</button>
           </div>
         )}
         {inGrace && (
@@ -1465,8 +1469,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
               <span className="soli-planbadge">Free trial</span>
               <span>{inTrial ? `${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left` : "Trial ended"}</span>
             </div>
-            <p className="soli-help">Keep your numbers, tax jar, and profit tracking going for $12/mo after your trial.</p>
-            <button className="soli-cta sm" onClick={onSubscribe} disabled={billingBusy}>{billingBusy ? "One moment…" : "Subscribe · $12/mo"}</button>
+            <p className="soli-help">Keep your numbers, tax jar, and profit tracking going after your trial. Cancel anytime.</p>
+            <PlanPicker onSubscribe={onSubscribe} busy={billingBusy} />
             <div className="soli-promo" style={{ marginTop: 10 }}>
               <input className="soli-input" placeholder="Promo code" value={pcode} onChange={e => { setPcode(e.target.value); setPerr(""); }} onKeyDown={e => { if (e.key === "Enter" && pcode.trim()) doRedeem(); }} />
               <button className="soli-ghost" onClick={doRedeem} disabled={predeeming || !pcode.trim()}>{predeeming ? "Checking…" : "Redeem"}</button>
@@ -1848,6 +1852,50 @@ function ReferralPanel() {
   );
 }
 
+/* ------------------------------ PLAN PICKER ------------------------------ */
+/* Prices come from Stripe via /api/plans so the app can never show a figure
+   different from what is charged. If the annual price is missing, this quietly
+   falls back to a single monthly button. */
+function PlanPicker({ onSubscribe, busy }) {
+  const [plans, setPlans] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/plans")
+      .then((r) => r.json())
+      .then((d) => { if (!off) setPlans(d); })
+      .catch(() => { if (!off) setFailed(true); });
+    return () => { off = true; };
+  }, []);
+
+  if (failed || (plans && !plans.monthly && !plans.annual)) {
+    return <button className="soli-cta sm" onClick={() => onSubscribe("monthly")} disabled={busy}>{busy ? "One moment…" : "Subscribe"}</button>;
+  }
+  if (!plans) return <button className="soli-cta sm" disabled>Loading plans…</button>;
+
+  const m = plans.monthly, a = plans.annual;
+  return (
+    <div className="soli-plans">
+      {m && (
+        <button className="soli-planopt" onClick={() => onSubscribe("monthly")} disabled={busy}>
+          <span className="soli-planname">Monthly</span>
+          <span className="soli-planprice">{m.label}<small>/mo</small></span>
+        </button>
+      )}
+      {a && (
+        <button className="soli-planopt best" onClick={() => onSubscribe("annual")} disabled={busy}>
+          <span className="soli-planname">
+            Yearly
+            {plans.savingPct > 0 && <em className="soli-planbadge2">save {plans.savingPct}%</em>}
+          </span>
+          <span className="soli-planprice">{a.label}<small>/yr</small></span>
+          {plans.perMonth && <span className="soli-planfoot">works out to {plans.perMonth}/mo</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------- PAYWALL --------------------------------- */
 function Paywall({ email, onSubscribe, onSignOut, busy, onRedeem }) {
   const [showCode, setShowCode] = useState(false);
@@ -1866,8 +1914,7 @@ function Paywall({ email, onSubscribe, onSignOut, busy, onRedeem }) {
         <span className="soli-logomark" style={{ width: 56, height: 56 }}><Sun size={26} strokeWidth={1.8} /></span>
         <h1>Your free trial has ended</h1>
         <p>Subscribe to keep your real take-home, tax jar, profit-per-hour, and every client and number you've logged.</p>
-        <div className="soli-payprice"><b>$12</b> / month</div>
-        <button className="soli-cta" onClick={onSubscribe} disabled={busy}>{busy ? "One moment…" : "Subscribe & keep going"}</button>
+        <PlanPicker onSubscribe={onSubscribe} busy={busy} />
         <p className="soli-paynote">Your data is safe and waiting. Subscribing brings it right back.</p>
         {!showCode ? (
           <button className="soli-linkbtn" style={{ marginTop: 2 }} onClick={() => setShowCode(true)}>Have a promo code?</button>
@@ -2193,6 +2240,19 @@ function Styles() {
 .soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+@media(max-width:420px){.soli-plans{grid-template-columns:1fr}}
+.soli-planopt{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;font-family:inherit;text-align:left;background:var(--surface);color:var(--ink);border:1.5px solid var(--line);border-radius:14px;padding:14px 15px;transition:.15s}
+.soli-planopt:hover{border-color:var(--clay);background:#F6E5DA}
+[data-theme="dark"] .soli-planopt:hover{background:#33241c}
+.soli-planopt.best{border-color:var(--clay);background:#F6E5DA}
+[data-theme="dark"] .soli-planopt.best{background:#33241c}
+.soli-planopt:disabled{opacity:.55;cursor:not-allowed}
+.soli-planname{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink2)}
+.soli-planbadge2{font-style:normal;font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;background:var(--clay);color:#fff;padding:2px 7px;border-radius:20px}
+.soli-planprice{font-family:'Fraunces',serif;font-size:24px;font-weight:600;line-height:1.15}
+.soli-planprice small{font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--ink2);margin-left:2px}
+.soli-planfoot{font-size:11.5px;color:var(--ink2)}
 .soli-danger{margin-top:26px;background:#FBEFE9;border:1px solid #E8C4B0;border-radius:14px;padding:16px 18px}
 .soli-danger .soli-datahead{color:var(--clay-d)}
 .soli-danger .soli-del{width:100%;justify-content:center;padding:12px;margin-top:8px}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { stripe, PRICE_ID } from "@/lib/stripe";
+import { stripe, priceFor } from "@/lib/stripe";
 import { sendAlert } from "@/lib/alert";
 
 export const runtime = "nodejs";
@@ -10,6 +10,10 @@ export async function POST(request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+    // "monthly" unless annual is explicitly asked for and configured.
+    const body = await request.json().catch(() => ({}));
+    const price = priceFor(body?.plan);
 
     // Reuse the user's Stripe customer if we already made one, else create it.
     const { data: row } = await supabase
@@ -44,7 +48,7 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: PRICE_ID, quantity: 1 }],
+      line_items: [{ price, quantity: 1 }],
       allow_promotion_codes: true,
       success_url: `${origin}/app?upgraded=1`,
       cancel_url: `${origin}/app`,
