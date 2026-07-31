@@ -7,6 +7,7 @@ import {
   Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
+import InstallPrompt from "@/components/InstallPrompt";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -429,6 +430,7 @@ export default function Soli() {
             <button onClick={goPortal} disabled={billingBusy}>{billingBusy ? "One moment…" : "Update payment"}</button>
           </div>
         )}
+        <InstallPrompt />
         {refBanner && (
           <div className="soli-trialbar" style={{ background: "linear-gradient(150deg,#5E7142,#475431)" }}>
             <span><Gift size={14} strokeWidth={2} /> {refBanner}</span>
@@ -1861,6 +1863,14 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-install{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:20px}
+.soli-installtext{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.soli-installtext b{font-size:13.5px}
+.soli-installtext span{font-size:12.5px;color:var(--ink2)}
+.soli-installbtn{flex:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:var(--clay);color:#fff;padding:9px 16px;border-radius:10px}
+.soli-installbtn:hover{background:var(--clay-d)}
+.soli-installx{flex:none;background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:var(--ink2);padding:0 2px}
+.soli-installx:hover{color:var(--ink)}
 .soli-taxgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .soli-taxgrid>div{background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
 .soli-taxgrid span{font-size:11.5px;color:var(--ink2)}

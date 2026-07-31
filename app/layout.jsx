@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import SWRegister from "@/components/SWRegister";
 import ErrorReporter from "@/components/ErrorReporter";
 
 const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -25,6 +26,15 @@ export const metadata = {
     title,
     description,
   },
+  appleWebApp: { capable: true, title: "Soli", statusBarStyle: "default" },
+};
+
+// Tints the mobile browser chrome to match whichever theme is showing.
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F6EFE4" },
+    { media: "(prefers-color-scheme: dark)", color: "#181410" },
+  ],
 };
 
 // Runs before paint so there's no light-mode flash. Uses saved choice, else OS.
@@ -36,7 +46,7 @@ export default function RootLayout({ children }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
-      <body><ErrorReporter>{children}</ErrorReporter><Analytics /></body>
+      <body><ErrorReporter>{children}</ErrorReporter><SWRegister /><Analytics /></body>
     </html>
   );
 }

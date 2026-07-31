@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Soli is offline</title>
+<style>
+  html,body{margin:0;height:100%}
+  body{display:flex;align-items:center;justify-content:center;padding:24px;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:#F6EFE4;color:#2B2118;text-align:center}
+  .mark{width:58px;height:58px;border-radius:50%;background:#BC6B4C;margin:0 auto 18px;
+    display:flex;align-items:center;justify-content:center}
+  h1{font-family:Georgia,serif;font-size:24px;margin:0 0 8px}
+  p{color:#6E5E4C;font-size:15px;line-height:1.5;margin:0 0 20px;max-width:320px}
+  button{font:inherit;font-weight:600;background:#BC6B4C;color:#fff;border:none;
+    padding:13px 24px;border-radius:12px;cursor:pointer}
+</style>
+</head>
+<body>
+  <div>
+    <div class="mark">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </svg>
+    </div>
+    <h1>You're offline</h1>
+    <p>Soli needs a connection to load your numbers. Anything you already saved is safe.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>
