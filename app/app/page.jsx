@@ -4,8 +4,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2
 } from "lucide-react";
+import ShareCard from "@/components/ShareCard";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -432,6 +433,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
+  const [shareOpen, setShareOpen] = useState(false);
   const rangeTitle = { "30d": "Last 30 days", "90d": "Last 90 days", year: "This year", all: "All time" }[range];
   const startMs = range === "all" ? 0
     : range === "year" ? new Date(new Date().getFullYear(), 0, 1).getTime()
@@ -554,6 +556,20 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
           <span className="soli-herosub">set this aside, don't spend it</span>
         </div>
       </div>
+
+      {month.length > 0 && (
+        <button className="soli-sharebtn" onClick={() => setShareOpen(true)}>
+          <Share2 size={15} strokeWidth={1.9} /> Share this {range === "30d" ? "month" : "run"}
+        </button>
+      )}
+      <ShareCard
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        amount={money2(pocketed)}
+        period={rangeTitle}
+        statLeft={{ label: "Services", value: String(month.length) }}
+        statRight={{ label: "Per hour", value: money2(byService.length ? byService[0].perHour : 0) }}
+      />
 
       <div className="soli-cards">
         <Stat label="Revenue" value={money2(totals.rev)} tone="neutral" />
@@ -1632,6 +1648,24 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-sharebtn{display:inline-flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--clay-d);background:var(--surface);border:1px solid var(--line);padding:10px 16px;border-radius:11px;transition:.15s}
+.soli-sharebtn:hover{border-color:var(--clay);background:#F6E5DA}
+[data-theme="dark"] .soli-sharebtn:hover{background:#33241c}
+/* Portaled to body, so it sits outside .soli-root and must carry the palette
+   and font itself rather than inheriting them. */
+.soli-sheet{--bg:#F6EFE4;--surface:#FFFDF9;--surface2:#FBF5EB;--ink:#2B2118;--ink2:#6E5E4C;--line:#E7DBC8;
+  --clay:#BC6B4C;--clay-d:#A4583B;--sage:#6E7A56;--sage-d:#5A6646;--profit:#5E7142;--cost:#9A6A54;--gold:#C9A24B;
+  font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--ink);line-height:1.45;
+  position:fixed;inset:0;z-index:60;background:rgba(30,22,16,.55);display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+[data-theme="dark"] .soli-sheet{--bg:#181410;--surface:#241f19;--surface2:#2d2720;--ink:#F2E9DB;--ink2:#b4a68f;--line:#3a332b;
+  --clay:#cb7d5b;--clay-d:#e29a75;--sage:#8b996f;--sage-d:#a2b081;--profit:#a4b77f;--cost:#cf9a7d;--gold:#d8b45f}
+.soli-sheet *{box-sizing:border-box}
+.soli-sheetbox{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:22px;max-height:92vh;overflow-y:auto}
+.soli-sheethead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.soli-sheethead h2{font-family:'Fraunces',serif;font-size:20px;font-weight:600;margin:0}
+.soli-sheetx{background:none;border:none;cursor:pointer;font-size:26px;line-height:1;color:var(--ink2);padding:0 4px}
+.soli-sheetx:hover{color:var(--ink)}
+.soli-sharepreview{display:block;width:100%;max-width:230px;margin:14px auto 0;border-radius:12px;border:1px solid var(--line)}
 .soli-toggle{display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink2);line-height:1.45}
 .soli-toggle input{width:18px;height:18px;flex:none;margin-top:1px;accent-color:var(--clay);cursor:pointer}
 .soli-appfoot{max-width:920px;margin:0 auto;padding:20px 22px 40px;text-align:center;font-size:13px;color:var(--ink2)}
