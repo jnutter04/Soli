@@ -458,7 +458,7 @@ export default function Soli() {
             <button onClick={() => setRefBanner("")}>Got it</button>
           </div>
         )}
-        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} />}
+        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} plan={plan} savePlan={savePlan} />}
         {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
@@ -481,7 +481,7 @@ export default function Soli() {
 }
 
 /* ------------------------------ DASHBOARD -------------------------------- */
-function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
+function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
@@ -499,6 +499,30 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
   const takeHome = totals.profit - setAside;
   const totalTips = totals.tips;
   const pocketed = takeHome + totalTips;
+
+  // Goal progress always uses the current calendar month, whatever range is
+  // selected above. The goal is a monthly one, so measuring 90 days or a whole
+  // year against it would overstate progress.
+  const goal = Number(plan.goal) || 0;
+  const goalStats = useMemo(() => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const dayOfMonth = d.getDate();
+    const kept = logs
+      .filter((l) => new Date(l.date).getTime() >= start)
+      .reduce((s, l) => s + profitOf(l, rent).profit * (1 - t) + (Number(l.tip) || 0), 0);
+    const daysLeft = daysInMonth - dayOfMonth;
+    return {
+      kept,
+      pct: goal > 0 ? Math.min(100, Math.round((kept / goal) * 100)) : 0,
+      remaining: Math.max(0, goal - kept),
+      daysLeft,
+      monthLabel: d.toLocaleDateString(undefined, { month: "long" }),
+      // Simple arithmetic, not a forecast: what is left divided by days left.
+      perDay: daysLeft > 0 ? Math.max(0, goal - kept) / daysLeft : null,
+    };
+  }, [logs, rent, t, goal]);
 
   // Trend vs the previous equal-length window (only for the rolling day ranges).
   const isRolling = range === "30d" || range === "90d";
@@ -609,6 +633,8 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
         </div>
       </div>
 
+      <GoalCard goal={goal} stats={goalStats} savePlan={savePlan} plan={plan} />
+
       {month.length > 0 && (
         <button className="soli-sharebtn" onClick={() => setShareOpen(true)}>
           <Share2 size={15} strokeWidth={1.9} /> Share this {range === "30d" ? "month" : "run"}
@@ -714,6 +740,82 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
       </section>
 
       <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log a service</button>
+    </div>
+  );
+}
+
+/* ------------------------------- GOAL CARD ------------------------------- */
+/* Progress toward the monthly take-home goal set in "What to charge". Uses the
+   same goal value rather than a second one, so the two screens can never
+   disagree. Editable here so the goal can be adjusted without leaving. */
+function GoalCard({ goal, stats, savePlan, plan }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(goal || ""));
+  useEffect(() => { setDraft(String(goal || "")); }, [goal]);
+
+  const save = () => {
+    const v = Math.max(0, Number(draft) || 0);
+    savePlan({ ...plan, goal: v });
+    setEditing(false);
+  };
+
+  if (!goal) {
+    return (
+      <div className="soli-goal">
+        <div className="soli-goaltop">
+          <span className="soli-goallabel">Monthly goal</span>
+          {!editing && <button className="soli-linkbtn" onClick={() => setEditing(true)}>Set a goal</button>}
+        </div>
+        {editing ? (
+          <div className="soli-goaledit">
+            <input className="soli-input" type="number" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }} placeholder="3000" />
+            <button className="soli-cta sm" onClick={save}>Save</button>
+          </div>
+        ) : (
+          <p className="soli-help" style={{ marginTop: 0 }}>Set a monthly take-home target and watch it fill up as you log work.</p>
+        )}
+      </div>
+    );
+  }
+
+  const met = stats.kept >= goal;
+  return (
+    <div className={"soli-goal" + (met ? " met" : "")}>
+      <div className="soli-goaltop">
+        <span className="soli-goallabel">{stats.monthLabel} goal</span>
+        {editing ? (
+          <div className="soli-goaledit">
+            <input className="soli-input" type="number" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            <button className="soli-cta sm" onClick={save}>Save</button>
+          </div>
+        ) : (
+          <button className="soli-linkbtn" onClick={() => setEditing(true)}>{money2(goal)} · edit</button>
+        )}
+      </div>
+
+      <div className="soli-goalnums">
+        <span className="soli-goalval">{money2(stats.kept)}</span>
+        <span className="soli-goalpct">{stats.pct}%</span>
+      </div>
+
+      <div className="soli-goaltrack">
+        <div className="soli-goalfill" style={{ width: Math.max(2, stats.pct) + "%" }} />
+      </div>
+
+      <div className="soli-goalfoot">
+        {met ? (
+          <span className="soli-goalmet">Goal met. Everything from here is on top.</span>
+        ) : (
+          <>
+            <span>{money2(stats.remaining)} to go</span>
+            {stats.daysLeft > 0
+              ? <span>{stats.daysLeft} {stats.daysLeft === 1 ? "day" : "days"} left, about {money2(stats.perDay)}/day</span>
+              : <span>last day of the month</span>}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2240,6 +2342,22 @@ function Styles() {
 .soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-goal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
+.soli-goal.met{border-color:#D3DBBC;background:linear-gradient(150deg,#EDF0E2,#E6EBD8)}
+[data-theme="dark"] .soli-goal.met{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
+.soli-goaltop{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.soli-goallabel{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2)}
+.soli-goaledit{display:flex;align-items:center;gap:8px}
+.soli-goaledit .soli-input{margin:0;width:120px;padding:7px 10px;font-size:14px}
+.soli-goaledit .soli-cta{width:auto;margin:0;padding:8px 14px;box-shadow:none}
+.soli-goalnums{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.soli-goalval{font-family:'Fraunces',serif;font-size:28px;font-weight:600;line-height:1.1}
+.soli-goalpct{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--sage-d)}
+.soli-goaltrack{height:10px;background:var(--surface2);border-radius:6px;overflow:hidden;margin:10px 0 9px}
+.soli-goalfill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--sage),var(--sage-d));transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.soli-goal.met .soli-goalfill{background:linear-gradient(90deg,var(--gold),#A9863A)}
+.soli-goalfoot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2)}
+.soli-goalmet{font-weight:600;color:var(--sage-d)}
 .soli-plans{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
 @media(max-width:420px){.soli-plans{grid-template-columns:1fr}}
 .soli-planopt{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;font-family:inherit;text-align:left;background:var(--surface);color:var(--ink);border:1.5px solid var(--line);border-radius:14px;padding:14px 15px;transition:.15s}
