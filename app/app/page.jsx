@@ -326,6 +326,10 @@ export default function Soli() {
   };
 
   const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
+  // A mistyped price would otherwise stay wrong forever and quietly skew every
+  // figure, including the tax export, so logged services must be fixable.
+  const updateLog = (id, patch) => saveLogs(logs.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const deleteLog = (id) => saveLogs(logs.filter((l) => l.id !== id));
   const saveClients = (v) => { setClients(v); if (userId) saveField(supabase, userId, "clients", v); };
   const saveProducts = (v) => { setProducts(v); if (userId) saveField(supabase, userId, "products", v); };
   const saveSettings = (v) => { setSettings(v); if (userId) saveField(supabase, userId, "settings", v); };
@@ -441,7 +445,8 @@ export default function Soli() {
         {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
-          templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty} />}
+          templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty}
+          updateLog={updateLog} deleteLog={deleteLog} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
@@ -827,7 +832,8 @@ const TRADE_LIST = [
 ];
 
 /* ------------------------------ LOG SERVICE ------------------------------ */
-function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates, specialty }) {
+function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxRate, templates = [], saveTemplates, specialty, updateLog, deleteLog }) {
+  const [batchOpen, setBatchOpen] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
   const filtered = (specialty && !showAllProducts) ? products.filter(p => !p.specialty || p.specialty === specialty) : products;
   const hiddenCount = products.length - filtered.length;
@@ -980,6 +986,16 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         </div>
       )}
 
+      {batchOpen ? (
+        <BatchDay clients={clients} saveClients={saveClients} logs={logs} saveLogs={saveLogs}
+          templates={templates} products={products} rent={rent} taxRate={taxRate}
+          onDone={() => setBatchOpen(false)} />
+      ) : (
+        <button type="button" className="soli-importtoggle" style={{ marginBottom: 20 }} onClick={() => setBatchOpen(true)}>
+          Saw several clients today? Log the whole day at once
+        </button>
+      )}
+
       <div className="soli-import">
         <button type="button" className="soli-importtoggle" onClick={() => { setImportOpen(o => !o); setImportRows(null); }}>
           {importOpen ? "Close import" : "Import services from your booking app"}
@@ -1084,6 +1100,115 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       {service && priceN > 0 && durN > 0 && (
         <button className="soli-ghost soli-tplsave" onClick={saveAsTemplate}>{tplSaved ? "Saved as template ✓" : "Save this as a template"}</button>
       )}
+
+      <RecentLogs logs={logs} clients={clients} rent={rent} updateLog={updateLog} deleteLog={deleteLog} />
+    </div>
+  );
+}
+
+/* --------------------------- BATCH DAY LOGGING ---------------------------- */
+/* Pros are hands-on all day and catch up at night, so logging one service at a
+   time is the main reason tracking gets abandoned. This adds a whole day at once. */
+function BatchDay({ clients, saveClients, logs, saveLogs, templates, products, rent, taxRate, onDone }) {
+  const blank = () => ({ id: uid(), clientId: clients[0]?.id || "", newClient: "", service: "", price: "", dur: "", tip: "", paySource: "card", productCost: 0 });
+  const [rows, setRows] = useState([blank(), blank(), blank()]);
+  const [saved, setSaved] = useState(0);
+
+  const set = (id, patch) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const applyTpl = (id, tplId) => {
+    const t = templates.find((x) => x.id === tplId);
+    if (!t) { set(id, { service: "", price: "", dur: "", productCost: 0 }); return; }
+    // Carry the template's product usage through at real cost, so batch-logged
+    // services are as accurate as ones logged one at a time.
+    const cost = Object.entries(t.qty || {}).reduce((s, [pid, q]) => {
+      const p = (products || []).find((x) => x.id === pid);
+      return s + (Number(q) || 0) * (p ? perUnitCost(p) : 0);
+    }, 0);
+    set(id, { service: t.name, price: String(t.price ?? ""), dur: String(t.durationMin ?? ""), paySource: t.paySource || "card", productCost: cost });
+  };
+
+  const filled = rows.filter((r) => r.service.trim() && Number(r.price) > 0 && Number(r.dur) > 0);
+  const totals = filled.reduce(
+    (a, r) => {
+      const { profit } = profitOf({ price: Number(r.price), productCost: r.productCost || 0, durationMin: Number(r.dur) }, rent);
+      a.booked += Number(r.price); a.tips += Number(r.tip) || 0; a.profit += profit; return a;
+    },
+    { booked: 0, tips: 0, profit: 0 }
+  );
+  const kept = totals.profit * (1 - taxRate / 100) + totals.tips;
+
+  const saveAll = () => {
+    if (filled.length === 0) return;
+    let nextClients = [...clients];
+    const now = new Date().toISOString();
+    const newLogs = filled.map((r) => {
+      let cid = r.clientId;
+      if (r.newClient.trim()) {
+        cid = uid();
+        nextClients = [...nextClients, { id: cid, name: r.newClient.trim(), phone: "", notes: "", rebookWeeks: 4, lastVisit: now }];
+      } else if (cid) {
+        nextClients = nextClients.map((c) => (c.id === cid ? { ...c, lastVisit: now } : c));
+      }
+      return {
+        id: uid(), clientId: cid, service: r.service.trim(), price: Number(r.price),
+        durationMin: Number(r.dur), paySource: r.paySource, tip: Number(r.tip) || 0,
+        productCost: Math.round((r.productCost || 0) * 100) / 100, date: now,
+      };
+    });
+    saveClients(nextClients);
+    saveLogs([...newLogs, ...logs]);
+    setSaved(newLogs.length);
+    setTimeout(() => { setSaved(0); onDone?.(); }, 1600);
+  };
+
+  return (
+    <div className="soli-batch">
+      <div className="soli-batchhead">
+        <b>Log your whole day</b>
+        <button className="soli-editbtn" onClick={onDone}>Close</button>
+      </div>
+      <p className="soli-help" style={{ marginTop: 0 }}>Add each client you saw, then save them all at once. Pick a saved service to fill the price and time for you.</p>
+
+      {rows.map((r, i) => (
+        <div className="soli-batchrow" key={r.id}>
+          <div className="soli-batchnum">{i + 1}</div>
+          <div className="soli-batchfields">
+            <select className="soli-input slim" value={r.clientId} onChange={(e) => set(r.id, { clientId: e.target.value })} disabled={!!r.newClient}>
+              <option value="">No client</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input className="soli-input slim" placeholder="or new name" value={r.newClient} onChange={(e) => set(r.id, { newClient: e.target.value })} />
+            {templates.length > 0 && (
+              <select className="soli-input slim" defaultValue="" onChange={(e) => applyTpl(r.id, e.target.value)}>
+                <option value="">Saved service…</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+            <input className="soli-input slim" placeholder="Service" value={r.service} onChange={(e) => set(r.id, { service: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder={CUR} value={r.price} onChange={(e) => set(r.id, { price: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder="min" value={r.dur} onChange={(e) => set(r.id, { dur: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder="tip" value={r.tip} onChange={(e) => set(r.id, { tip: e.target.value })} />
+            <select className="soli-input slim" value={r.paySource} onChange={(e) => set(r.id, { paySource: e.target.value })}>
+              {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+          <button className="soli-iconbtn" onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.id !== r.id) : rs))} aria-label="Remove row"><Trash2 size={15} /></button>
+        </div>
+      ))}
+
+      <button className="soli-ghost" onClick={() => setRows((rs) => [...rs, blank()])}>Add another client</button>
+
+      {filled.length > 0 && (
+        <div className="soli-preview good" style={{ marginTop: 14 }}>
+          <div className="soli-prevrow"><span>{filled.length} {filled.length === 1 ? "service" : "services"} booked</span><span>{money2(totals.booked)}</span></div>
+          {totals.tips > 0 && <div className="soli-prevrow"><span>Tips</span><span>+ {money2(totals.tips)}</span></div>}
+          <div className="soli-prevrow main"><span>You keep from today</span><span>{money2(kept)}</span></div>
+        </div>
+      )}
+
+      <button className="soli-cta" onClick={saveAll} disabled={filled.length === 0}>
+        {saved > 0 ? `Saved ${saved} ✓` : `Save ${filled.length || ""} ${filled.length === 1 ? "service" : "services"}`.trim()}
+      </button>
     </div>
   );
 }
@@ -1406,6 +1531,94 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
       </div>
       <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
     </div>
+  );
+}
+
+/* ---------------------------- RECENT LOGS -------------------------------- */
+/* Lets a logged service be corrected or removed. Without this a typo stays in
+   the numbers permanently, and the only escape is wiping all data. */
+function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
+  const [open, setOpen] = useState(null);
+  const [form, setForm] = useState({});
+
+  const recent = useMemo(
+    () => [...(logs || [])].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12),
+    [logs]
+  );
+  if (recent.length === 0) return null;
+
+  const nameOf = (id) => (clients.find((c) => c.id === id) || {}).name || "No client";
+
+  const startEdit = (l) => {
+    setOpen(l.id);
+    setForm({
+      service: l.service, price: String(l.price ?? ""), durationMin: String(l.durationMin ?? ""),
+      tip: String(l.tip || ""), productCost: String(l.productCost ?? ""), paySource: l.paySource || "card",
+    });
+  };
+  const commit = (id) => {
+    const price = Number(form.price) || 0;
+    const durationMin = Number(form.durationMin) || 0;
+    if (!form.service.trim() || durationMin <= 0) return;
+    updateLog(id, {
+      service: form.service.trim(), price, durationMin,
+      tip: Number(form.tip) || 0, productCost: Number(form.productCost) || 0,
+      paySource: form.paySource,
+    });
+    setOpen(null);
+  };
+  const remove = (l) => {
+    if (confirm(`Delete "${l.service}" for ${nameOf(l.clientId)}? This cannot be undone.`)) {
+      deleteLog(l.id);
+      setOpen(null);
+    }
+  };
+
+  return (
+    <section className="soli-block" style={{ marginTop: 24 }}>
+      <div className="soli-blockhead"><Bell size={18} strokeWidth={1.9} /><h2>Recent services</h2></div>
+      <p className="soli-note">Tap one to fix a typo or remove it. Corrections update every number in Soli.</p>
+      {recent.map((l) => (
+        <div className="soli-recentrow" key={l.id}>
+          {open === l.id ? (
+            <div className="soli-recentedit">
+              <Field label="Service"><input className="soli-input" value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })} /></Field>
+              <div className="soli-row2">
+                <Field label={`Price (${CUR})`}><input className="soli-input" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field>
+                <Field label="Minutes"><input className="soli-input" type="number" value={form.durationMin} onChange={(e) => setForm({ ...form, durationMin: e.target.value })} /></Field>
+              </div>
+              <div className="soli-row2">
+                <Field label={`Tip (${CUR})`}><input className="soli-input" type="number" value={form.tip} onChange={(e) => setForm({ ...form, tip: e.target.value })} /></Field>
+                <Field label={`Product cost (${CUR})`}><input className="soli-input" type="number" value={form.productCost} onChange={(e) => setForm({ ...form, productCost: e.target.value })} /></Field>
+              </div>
+              <Field label="Paid by">
+                <div className="soli-seg">
+                  {SOURCES.map((s) => (
+                    <button key={s.id} type="button" className={"soli-segbtn" + (form.paySource === s.id ? " on" : "")} onClick={() => setForm({ ...form, paySource: s.id })}>{s.label}</button>
+                  ))}
+                </div>
+              </Field>
+              <div className="soli-editactions">
+                <button className="soli-cta sm" onClick={() => commit(l.id)}>Save changes</button>
+                <button className="soli-editbtn" onClick={() => setOpen(null)}>Cancel</button>
+                <button className="soli-del" onClick={() => remove(l)}><Trash2 size={14} /> Delete</button>
+              </div>
+            </div>
+          ) : (
+            <button className="soli-recentbtn" onClick={() => startEdit(l)}>
+              <span className="soli-recentmain">
+                <span className="soli-recentsvc">{l.service}</span>
+                <span className="soli-recentmeta">{fmtDate(l.date)} · {nameOf(l.clientId)} · {srcLabel(l.paySource)}</span>
+              </span>
+              <span className="soli-recentamt">
+                {money2(l.price)}
+                <small>{money2(profitOf(l, rent).profit)} kept</small>
+              </span>
+            </button>
+          )}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -1863,6 +2076,23 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-recentrow{border-top:1px solid var(--line)}
+.soli-recentrow:first-of-type{border-top:none}
+.soli-recentbtn{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:12px 2px;color:var(--ink)}
+.soli-recentbtn:hover{background:var(--surface2)}
+.soli-recentmain{display:flex;flex-direction:column;gap:2px;min-width:0}
+.soli-recentsvc{font-size:14.5px;font-weight:600}
+.soli-recentmeta{font-size:12px;color:var(--ink2)}
+.soli-recentamt{display:flex;flex-direction:column;align-items:flex-end;font-family:'Fraunces',serif;font-size:15px;font-weight:600;white-space:nowrap}
+.soli-recentamt small{font-family:'Hanken Grotesk',sans-serif;font-size:11px;font-weight:400;color:var(--profit)}
+.soli-recentedit{padding:14px 0}
+.soli-batch{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px}
+.soli-batchhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
+.soli-batchhead b{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-batchrow{display:flex;align-items:flex-start;gap:9px;padding:11px 0;border-top:1px solid var(--line)}
+.soli-batchnum{flex:none;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--line);color:var(--ink2);font-size:11.5px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-top:5px}
+.soli-batchfields{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:7px;min-width:0}
+@media(max-width:560px){.soli-batchfields{grid-template-columns:repeat(2,1fr)}}
 .soli-install{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:20px}
 .soli-installtext{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
 .soli-installtext b{font-size:13.5px}
