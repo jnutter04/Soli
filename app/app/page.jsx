@@ -111,6 +111,13 @@ const SPECIALTIES = [
 ];
 const specialtyLabel = (k) => (SPECIALTIES.find((s) => s.key === k) || {}).label || "";
 
+/* Opens the phone's messaging app with a friendly rebooking note already
+   written, so a nudge is one tap. The pro can edit it before sending. */
+const rebookSms = (phone, name) =>
+  `sms:${String(phone || "").replace(/[^0-9+]/g, "")}?&body=${encodeURIComponent(
+    `Hi ${String(name || "").split(" ")[0]}! It has been a little while since your last visit. Want me to get you back on the books?`
+  )}`;
+
 /* Small starter product lists per specialty: [name, totalCost, amount, unit]. */
 const STARTER_PRODUCTS = {
   esthetician: [["Cleanser", 24, 240, "ml"], ["Serum", 40, 30, "ml"], ["Mask", 30, 200, "ml"], ["Wax", 20, 400, "g"], ["Gloves", 8, 100, "pair"]],
@@ -632,7 +639,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [] }) {
             <div><div className="soli-duename">{c.name}</div><div className="soli-duemeta">last {fmtDate(c.lastVisit)} · every {c.rebookWeeks}w</div></div>
             <div className="soli-dueactions">
               <span className={"soli-pill " + (c.overdue > 0 ? "late" : "soon")}>{c.overdue > 0 ? c.overdue + "d overdue" : "due soon"}</span>
-              {c.phone && <a className="soli-textlink" href={"sms:" + c.phone.replace(/[^0-9+]/g, "")}>Text</a>}
+              {c.phone && <a className="soli-textlink" href={rebookSms(c.phone, c.name)}>Text</a>}
             </div>
           </div>
         ))}
@@ -1142,7 +1149,7 @@ function ClientsView({ clients, logs, saveClients, rent }) {
                     {c.phone && (
                       <p className="soli-clientnotes soli-contactrow">
                         <a href={"tel:" + c.phone.replace(/[^0-9+]/g, "")}>📞 {c.phone}</a>
-                        <a className="soli-textlink" href={"sms:" + c.phone.replace(/[^0-9+]/g, "")}>Text</a>
+                        <a className="soli-textlink" href={rebookSms(c.phone, c.name)}>Text</a>
                       </p>
                     )}
                     <p className="soli-clientnotes">↻ Rebook every {c.rebookWeeks || 4} weeks</p>
