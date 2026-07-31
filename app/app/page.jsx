@@ -345,6 +345,19 @@ export default function Soli() {
     router.refresh();
   };
 
+  const deleteAccount = async () => {
+    try {
+      const r = await fetch("/api/account/delete", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: d.error || "Could not delete the account." };
+      await supabase.auth.signOut();
+      window.location.assign("/");
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not reach the server. Please try again." };
+    }
+  };
+
   // Optional explore/reset tools surfaced in Settings.
   const loadSample = () => {
     const seed = buildSeed();
@@ -453,7 +466,7 @@ export default function Soli() {
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
           comped={comped} onRedeem={redeemCode}
-          logs={logs} clients={clients} rent={rent} />}
+          logs={logs} clients={clients} rent={rent} onDeleteAccount={deleteAccount} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -1408,7 +1421,16 @@ function Inventory({ products, saveProducts, specialty }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0 }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, onDeleteAccount }) {
+  const [delOpen, setDelOpen] = useState(false);
+  const [delConfirm, setDelConfirm] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+  const [delErr, setDelErr] = useState("");
+  const runDelete = async () => {
+    setDelBusy(true); setDelErr("");
+    const res = await onDeleteAccount();
+    if (!res?.ok) { setDelErr(res?.error || "Could not delete the account."); setDelBusy(false); }
+  };
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
   const [pcode, setPcode] = useState(""); const [predeeming, setPredeeming] = useState(false); const [perr, setPerr] = useState("");
@@ -1529,7 +1551,30 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <button className="soli-ghost" onClick={onLoad}>Load sample data to explore</button>
         <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
       </div>
-      <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
+      <p className="soli-help">Your data saves to your account, so it follows you to any device you sign in on.</p>
+
+      <div className="soli-danger">
+        <div className="soli-datahead">Delete your account</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>
+          Permanently erases your account and everything in it: services, clients, products and settings.
+          Any active subscription is canceled first. This cannot be undone, so export anything you want to keep before you start.
+        </p>
+        {!delOpen ? (
+          <button className="soli-del" onClick={() => setDelOpen(true)}><Trash2 size={15} /> Delete my account</button>
+        ) : (
+          <>
+            <label className="soli-label" style={{ marginTop: 6 }}>Type DELETE to confirm</label>
+            <input className="soli-input" value={delConfirm} onChange={(e) => setDelConfirm(e.target.value)} placeholder="DELETE" autoComplete="off" />
+            {delErr && <p className="soli-help" style={{ color: "var(--clay-d)" }}>{delErr}</p>}
+            <div className="soli-refactions">
+              <button className="soli-del" disabled={delConfirm.trim() !== "DELETE" || delBusy} onClick={runDelete}>
+                {delBusy ? "Deleting…" : "Permanently delete"}
+              </button>
+              <button className="soli-editbtn" onClick={() => { setDelOpen(false); setDelConfirm(""); setDelErr(""); }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2148,6 +2193,11 @@ function Styles() {
 .soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.soli-danger{margin-top:26px;background:#FBEFE9;border:1px solid #E8C4B0;border-radius:14px;padding:16px 18px}
+.soli-danger .soli-datahead{color:var(--clay-d)}
+.soli-danger .soli-del{width:100%;justify-content:center;padding:12px;margin-top:8px}
+.soli-danger .soli-del:disabled{opacity:.45;cursor:not-allowed}
+[data-theme="dark"] .soli-danger{background:#2e211b;border-color:#5a3a2b}
 .soli-datahead{font-weight:600;font-size:14px;margin-bottom:2px}
 .soli-ghost{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-family:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-ghost:hover{border-color:var(--clay);color:var(--ink)}
