@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import RefCapture from "@/components/RefCapture";
 
 /* Reusable sun mark (matches the app + landing) */
 function SunMark({ size = 20, stroke = 1.8, color }) {
@@ -87,6 +88,7 @@ export default function LoginPage() {
   return (
     <div className="lg-root">
       <LoginStyles />
+      <RefCapture />
       <div className="lg-card">
         <div className="lg-brand">
           <span className="lg-logomark"><SunMark size={20} stroke={1.9} color="#fff" /></span>

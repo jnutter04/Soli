@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
 import { createClient } from "@/lib/supabase/client";
@@ -184,6 +184,7 @@ export default function Soli() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [refBanner, setRefBanner] = useState("");
   const [userId, setUserId] = useState(null);
   const [email, setEmail] = useState("");
   const [tab, setTab] = useState("dash");
@@ -266,6 +267,26 @@ export default function Soli() {
           .then((r) => r.json())
           .then((d) => { if (d && d.status !== undefined && d.status !== sub) setSubStatus(d.status); })
           .catch(() => {});
+
+        // If they arrived from someone's referral link, claim it once. The stored
+        // code is cleared either way so a failed claim can't retry forever.
+        try {
+          const pending = localStorage.getItem("soli-ref");
+          if (pending) {
+            const r = await fetch("/api/referral", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: pending }),
+            });
+            const d = await r.json().catch(() => ({}));
+            localStorage.removeItem("soli-ref");
+            if (d?.ok && !d.already && d.rewardDays) {
+              const fresh = await loadUserState(supabase, user.id);
+              if (fresh?.trial_ends_at) setTrialEndsAt(fresh.trial_ends_at);
+              setRefBanner(`Referral applied. You have ${d.rewardDays} extra days on your trial.`);
+            }
+          }
+        } catch { /* never let a referral problem block the app */ }
       } catch (e) {
         console.error(e);
         setLoadError(e?.message || String(e));
@@ -406,6 +427,12 @@ export default function Soli() {
           <div className="soli-trialbar grace">
             <span><AlertTriangle size={14} strokeWidth={2} /> There's a problem with your last payment. Update your card to keep Soli Pro.</span>
             <button onClick={goPortal} disabled={billingBusy}>{billingBusy ? "One moment…" : "Update payment"}</button>
+          </div>
+        )}
+        {refBanner && (
+          <div className="soli-trialbar" style={{ background: "linear-gradient(150deg,#5E7142,#475431)" }}>
+            <span><Gift size={14} strokeWidth={2} /> {refBanner}</span>
+            <button onClick={() => setRefBanner("")}>Got it</button>
           </div>
         )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} />}
@@ -1347,6 +1374,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </label>
       </Field>
 
+      <ReferralPanel />
+
       <div className="soli-datatools">
         <div className="soli-datahead">Savings set-asides</div>
         <p className="soli-help" style={{ marginTop: 0 }}>Optional buckets to remind yourself to set aside part of what you keep. These are your own suggestions, not financial advice. Amounts show on your dashboard.</p>
@@ -1371,6 +1400,57 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
       </div>
       <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
+    </div>
+  );
+}
+
+/* ------------------------------- REFERRAL -------------------------------- */
+function ReferralPanel() {
+  const [code, setCode] = useState("");
+  const [count, setCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    fetch("/api/referral")
+      .then((r) => r.json())
+      .then((d) => { if (d?.code) { setCode(d.code); setCount(d.count || 0); } else if (d?.error) setErr(d.error); })
+      .catch(() => setErr("Could not load your referral link."));
+  }, []);
+
+  const link = code ? `https://soli.beauty/?ref=${code}` : "";
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    } catch { setErr("Copy failed. Select the link and copy it manually."); }
+  };
+  const share = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: "Soli", text: "Soli shows what you actually keep after product, booth rent and taxes. Try it free:", url: link });
+      else copy();
+    } catch { /* user dismissed the share sheet */ }
+  };
+
+  return (
+    <div className="soli-datatools">
+      <div className="soli-datahead">Invite a friend</div>
+      <p className="soli-help" style={{ marginTop: 0 }}>
+        Share your link. They get an extra 30 days free, and you get a free month too, added to your trial or credited to your bill.
+      </p>
+      {err && <p className="soli-help" style={{ color: "var(--clay-d)" }}>{err}</p>}
+      {code ? (
+        <>
+          <div className="soli-reflink">{link}</div>
+          <div className="soli-refactions">
+            <button className="soli-cta sm" onClick={share}>Share link</button>
+            <button className="soli-ghost" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <p className="soli-help">
+            {count === 0 ? "No one has joined from your link yet." : `${count} ${count === 1 ? "person has" : "people have"} joined from your link.`}
+          </p>
+        </>
+      ) : !err ? <p className="soli-help">Loading your link…</p> : null}
     </div>
   );
 }
@@ -1648,6 +1728,10 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-reflink{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--ink);word-break:break-all;margin-bottom:10px;font-family:'SFMono-Regular',ui-monospace,Menlo,monospace}
+.soli-refactions{display:flex;gap:10px;flex-wrap:wrap}
+.soli-refactions .soli-cta{width:auto;margin-top:0}
+.soli-refactions .soli-ghost{width:auto}
 .soli-sharebtn{display:inline-flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--clay-d);background:var(--surface);border:1px solid var(--line);padding:10px 16px;border-radius:11px;transition:.15s}
 .soli-sharebtn:hover{border-color:var(--clay);background:#F6E5DA}
 [data-theme="dark"] .soli-sharebtn:hover{background:#33241c}

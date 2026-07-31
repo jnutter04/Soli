@@ -1,4 +1,5 @@
 import Link from "next/link";
+import RefCapture from "@/components/RefCapture";
 
 /* Reusable sun mark (matches the app + favicon) */
 function SunMark({ size = 20, stroke = 1.8, color }) {
@@ -24,6 +25,7 @@ export default function Landing() {
   return (
     <div className="lp">
       <LandingStyles />
+      <RefCapture />
 
       {/* NAV */}
       <header className="lp-nav">
