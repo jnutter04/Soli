@@ -445,7 +445,8 @@ export default function Soli() {
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
-          comped={comped} onRedeem={redeemCode} />}
+          comped={comped} onRedeem={redeemCode}
+          logs={logs} clients={clients} rent={rent} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -1280,7 +1281,7 @@ function Inventory({ products, saveProducts, specialty }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0 }) {
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
   const [pcode, setPcode] = useState(""); const [predeeming, setPredeeming] = useState(false); const [perr, setPerr] = useState("");
@@ -1374,6 +1375,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </label>
       </Field>
 
+      <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} />
+
       <ReferralPanel />
 
       <div className="soli-datatools">
@@ -1400,6 +1403,136 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
       </div>
       <p className="soli-help">Your data saves automatically in this browser and persists between visits.</p>
+    </div>
+  );
+}
+
+/* ----------------------------- TAX EXPORT -------------------------------- */
+/* Note on tips: profitOf deliberately excludes them so services can be compared
+   fairly. Tips are still income, so the tax figures here add them back. Using
+   the dashboard's profit number for taxes would understate earnings. */
+const csvCell = (v) => {
+  const s = v == null ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+const download = (name, text) => {
+  const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+const ymd = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function TaxExport({ logs, clients, settings, rent, taxRate }) {
+  const years = useMemo(() => {
+    const set = new Set((logs || []).map((l) => new Date(l.date).getFullYear()));
+    return [...set].sort((a, b) => b - a);
+  }, [logs]);
+  const [year, setYear] = useState(years[0] || new Date().getFullYear());
+  useEffect(() => { if (years.length && !years.includes(year)) setYear(years[0]); }, [years, year]);
+
+  const nameOf = (id) => (clients.find((c) => c.id === id) || {}).name || "";
+  const rows = useMemo(() => (logs || []).filter((l) => new Date(l.date).getFullYear() === year), [logs, year]);
+
+  const t = useMemo(() => {
+    let revenue = 0, tips = 0, product = 0, booth = 0, minutes = 0;
+    rows.forEach((l) => {
+      const b = (l.durationMin / 60) * rent;
+      revenue += Number(l.price) || 0;
+      tips += Number(l.tip) || 0;
+      product += Number(l.productCost) || 0;
+      booth += b;
+      minutes += Number(l.durationMin) || 0;
+    });
+    const gross = revenue + tips;             // tips are income
+    const expenses = product + booth;
+    const net = gross - expenses;
+    return { revenue, tips, product, booth, minutes, gross, expenses, net, setAside: net * (taxRate / 100) };
+  }, [rows, rent, taxRate]);
+
+  if (years.length === 0) {
+    return (
+      <div className="soli-datatools">
+        <div className="soli-datahead">Tax &amp; exports</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Log some services and your year-end summary and accountant export will appear here.</p>
+      </div>
+    );
+  }
+
+  const cur = settings.currency || "USD";
+
+  const exportServices = () => {
+    const head = ["Date", "Client", "Service", "Payment method", "Currency", "Price", "Tip", "Product cost", "Booth time cost", "Net (excl. tip)", "Minutes"];
+    const body = rows
+      .slice()
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((l) => {
+        const b = (l.durationMin / 60) * rent;
+        return [ymd(l.date), nameOf(l.clientId), l.service, srcLabel(l.paySource), cur,
+          round2(l.price), round2(Number(l.tip) || 0), round2(l.productCost), round2(b),
+          round2(l.price - l.productCost - b), l.durationMin];
+      });
+    download(`soli-services-${year}.csv`, toCsv([head, ...body]));
+  };
+
+  const exportSummary = () => {
+    const out = [
+      ["Soli year-end summary", String(year)],
+      ["Currency", cur],
+      ["Generated", ymd(new Date().toISOString())],
+      [],
+      ["INCOME"],
+      ["Service revenue", round2(t.revenue)],
+      ["Tips", round2(t.tips)],
+      ["Gross income", round2(t.gross)],
+      [],
+      ["EXPENSES (from your entries)"],
+      ["Product cost", round2(t.product)],
+      ["Booth time allocated to services", round2(t.booth)],
+      ["Total expenses", round2(t.expenses)],
+      [],
+      ["Net profit before tax", round2(t.net)],
+      [`Set aside at your ${taxRate}% rate`, round2(t.setAside)],
+      [],
+      ["Services logged", rows.length],
+      ["Hours in chair", round2(t.minutes / 60)],
+      [],
+      ["Note", "Prepared from figures entered by the user. Not tax advice and not a filed return."],
+      ["Note", "Booth time is hours worked times the hourly rate in Settings. If rent is paid as a flat amount, use the actual amount paid."],
+      ["Note", "Other deductible costs such as supplies, mileage, insurance and software are not tracked here."],
+    ];
+    download(`soli-tax-summary-${year}.csv`, toCsv(out));
+  };
+
+  return (
+    <div className="soli-datatools">
+      <div className="soli-datahead">Tax &amp; exports</div>
+      <p className="soli-help" style={{ marginTop: 0 }}>
+        A year of your numbers, ready to hand to an accountant. Tips are counted as income here, even though they stay out of the per-service profit comparisons.
+      </p>
+
+      <select className="soli-input" style={{ marginBottom: 12 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+      </select>
+
+      <div className="soli-taxgrid">
+        <div><span>Gross income</span><b>{money2(t.gross)}</b></div>
+        <div><span>Expenses</span><b className="cost">{money2(t.expenses)}</b></div>
+        <div><span>Net before tax</span><b className="profit">{money2(t.net)}</b></div>
+        <div><span>Set aside ({taxRate}%)</span><b>{money2(t.setAside)}</b></div>
+      </div>
+
+      <div className="soli-refactions" style={{ marginTop: 12 }}>
+        <button className="soli-cta sm" onClick={exportSummary}>Download summary</button>
+        <button className="soli-ghost" onClick={exportServices}>Download services</button>
+      </div>
+
+      <p className="soli-help">
+        Prepared from what you entered, so it is only as accurate as your logs. It is not tax advice or a filed return. Booth time is your hours times your hourly rate. If you pay flat rent, give your accountant the amount actually paid. Costs Soli does not track, like supplies, mileage or insurance, are not included.
+      </p>
     </div>
   );
 }
@@ -1728,6 +1861,12 @@ function Styles() {
 .soli-bucketpct .soli-input{margin:0}
 .soli-bucketpct span{color:var(--ink2);font-size:13px}
 .soli-bucketadd{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.soli-taxgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.soli-taxgrid>div{background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+.soli-taxgrid span{font-size:11.5px;color:var(--ink2)}
+.soli-taxgrid b{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-taxgrid b.cost{color:var(--cost)}
+.soli-taxgrid b.profit{color:var(--profit)}
 .soli-reflink{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--ink);word-break:break-all;margin-bottom:10px;font-family:'SFMono-Regular',ui-monospace,Menlo,monospace}
 .soli-refactions{display:flex;gap:10px;flex-wrap:wrap}
 .soli-refactions .soli-cta{width:auto;margin-top:0}
