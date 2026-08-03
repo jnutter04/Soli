@@ -992,6 +992,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [price, setPrice] = useState("");
   const [dur, setDur] = useState("");
   const [tip, setTip] = useState("");
+  const [when, setWhen] = useState(ymd(new Date().toISOString()));
   const [paySource, setPaySource] = useState("card");
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
@@ -1015,17 +1016,24 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
 
   const submit = () => {
     if (!service || !priceN || !durN) return;
+    const at = dateFromInput(when);
     let cid = clientId, cl = clients;
     if (newClient.trim()) {
       cid = uid();
-      cl = [...clients, { id: cid, name: newClient.trim(), phone: "", notes: "", rebookWeeks: 4, lastVisit: new Date().toISOString() }];
+      cl = [...clients, { id: cid, name: newClient.trim(), phone: "", notes: "", rebookWeeks: 4, lastVisit: at }];
       saveClients(cl);
     } else if (cid) {
-      saveClients(clients.map(c => c.id === cid ? { ...c, lastVisit: new Date().toISOString() } : c));
+      // Only move lastVisit forward. Entering old history should not make a
+      // client look like they were just seen, which would hide them from
+      // rebooking reminders and the slipping-away list.
+      saveClients(clients.map(c => c.id === cid
+        ? { ...c, lastVisit: (!c.lastVisit || new Date(at) > new Date(c.lastVisit)) ? at : c.lastVisit }
+        : c));
     }
     saveLogs([{ id: uid(), clientId: cid, service: service.trim(), price: priceN, durationMin: durN,
-      paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100, date: new Date().toISOString() }, ...logs]);
+      paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100, date: at }, ...logs]);
     setSaved(true); setService(""); setPrice(""); setDur(""); setTip(""); setQty({}); setNewClient(""); setPaySource("card");
+    setWhen(ymd(new Date().toISOString()));
     setTimeout(() => setSaved(false), 2200);
   };
 
@@ -1200,6 +1208,14 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         <Field label={`Price charged (${CUR})`}><input className="soli-input" type="number" inputMode="decimal" placeholder="120" value={price} onChange={e => setPrice(e.target.value)} /></Field>
         <Field label="Time in chair (min)"><input className="soli-input" type="number" inputMode="numeric" placeholder="120" value={dur} onChange={e => setDur(e.target.value)} /></Field>
       </div>
+
+      <Field label="Date">
+        <input className="soli-input" type="date" value={when} max={ymd(new Date().toISOString())}
+          onChange={(e) => setWhen(e.target.value || ymd(new Date().toISOString()))} />
+        {when !== ymd(new Date().toISOString()) && (
+          <p className="soli-help">Entering an older visit. Leave this on today for work you just finished.</p>
+        )}
+      </Field>
 
       <Field label={`Tip (optional, ${CUR})`}>
         <input className="soli-input" type="number" inputMode="decimal" placeholder="0" value={tip} onChange={e => setTip(e.target.value)} />
@@ -1800,6 +1816,7 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
     setForm({
       service: l.service, price: String(l.price ?? ""), durationMin: String(l.durationMin ?? ""),
       tip: String(l.tip || ""), productCost: String(l.productCost ?? ""), paySource: l.paySource || "card",
+      date: ymd(l.date),
     });
   };
   const commit = (id) => {
@@ -1810,6 +1827,7 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
       service: form.service.trim(), price, durationMin,
       tip: Number(form.tip) || 0, productCost: Number(form.productCost) || 0,
       paySource: form.paySource,
+      date: dateFromInput(form.date),
     });
     setOpen(null);
   };
@@ -1837,6 +1855,7 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
                 <Field label={`Tip (${CUR})`}><input className="soli-input" type="number" value={form.tip} onChange={(e) => setForm({ ...form, tip: e.target.value })} /></Field>
                 <Field label={`Product cost (${CUR})`}><input className="soli-input" type="number" value={form.productCost} onChange={(e) => setForm({ ...form, productCost: e.target.value })} /></Field>
               </div>
+              <Field label="Date"><input className="soli-input" type="date" value={form.date || ""} max={ymd(new Date().toISOString())} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
               <Field label="Paid by">
                 <div className="soli-seg">
                   {SOURCES.map((s) => (
@@ -1997,6 +2016,15 @@ const download = (name, text) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 const ymd = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+/* Turn a date input's YYYY-MM-DD into a timestamp. Anchored at midday so a
+   timezone shift can never push the entry onto the day before or after, which
+   would land visits in the wrong week or month. Today keeps the current time. */
+const dateFromInput = (s) => {
+  if (!s) return new Date().toISOString();
+  return s === ymd(new Date().toISOString())
+    ? new Date().toISOString()
+    : new Date(s + "T12:00:00").toISOString();
+};
 const round2 = (n) => Math.round(n * 100) / 100;
 
 function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
