@@ -104,6 +104,31 @@ function profitOf(log, rent) {
 const DEFAULT_SETTINGS = { boothRentHourly: 12, taxRate: 30 };
 const DEFAULT_PLAN = { goal: 3000, monthlyRent: 1400, avgPrice: 90, capacity: 18 };
 
+/* How much of a product is left, worked out from the amount last recorded as on
+   hand minus what services have used since. Deriving it means editing or
+   deleting a service corrects the stock automatically, where a running counter
+   would drift out of step with reality and could never be trusted again. */
+function stockFor(product, logs) {
+  const stocked = Number(product.stocked) || 0;
+  if (!stocked || !product.stockedAt) return null; // not tracking this one
+  const since = new Date(product.stockedAt).getTime();
+  let used = 0, uses = 0;
+  (logs || []).forEach((l) => {
+    if (new Date(l.date).getTime() < since) return;
+    const q = Number(l.qty && l.qty[product.id]) || 0;
+    if (q > 0) { used += q; uses += 1; }
+  });
+  const remaining = Math.max(0, stocked - used);
+  const perUse = uses > 0 ? used / uses : 0;
+  return {
+    stocked, used, remaining,
+    pct: remaining / stocked,
+    // Only estimate services left once there is real usage to average.
+    servicesLeft: perUse > 0 ? Math.floor(remaining / perUse) : null,
+  };
+}
+const isLowStock = (s) => !!s && (s.remaining <= 0 || s.pct <= 0.2 || (s.servicesLeft !== null && s.servicesLeft <= 3));
+
 /* Business overhead categories. These are costs that are not tied to one
    service, so they never touch profitOf. Folding them into per-service profit
    would distort which services are actually worth doing. */
@@ -495,7 +520,7 @@ export default function Soli() {
           updateLog={updateLog} deleteLog={deleteLog} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
-        {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} />}
+        {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} logs={logs} />}
         {tab === "exp" && <ExpensesView expenses={expenses} saveExpenses={saveExpenses} ready={expensesReady} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
@@ -1030,8 +1055,15 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
         ? { ...c, lastVisit: (!c.lastVisit || new Date(at) > new Date(c.lastVisit)) ? at : c.lastVisit }
         : c));
     }
+    // Record how much of each product was used, not just the total cost, so
+    // stock remaining can be worked out from history rather than a running
+    // counter that would drift whenever a service is edited or deleted.
+    const usedQty = {};
+    Object.keys(qty).forEach((pid) => { const n = Number(qty[pid]); if (n > 0) usedQty[pid] = n; });
+
     saveLogs([{ id: uid(), clientId: cid, service: service.trim(), price: priceN, durationMin: durN,
-      paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100, date: at }, ...logs]);
+      paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100,
+      qty: Object.keys(usedQty).length ? usedQty : undefined, date: at }, ...logs]);
     setSaved(true); setService(""); setPrice(""); setDur(""); setTip(""); setQty({}); setNewClient(""); setPaySource("card");
     setWhen(ymd(new Date().toISOString()));
     setTimeout(() => setSaved(false), 2200);
@@ -1575,10 +1607,24 @@ function ClientsView({ clients, logs, saveClients, rent }) {
 }
 
 /* ------------------------------ INVENTORY -------------------------------- */
-function Inventory({ products, saveProducts, specialty }) {
+function Inventory({ products, saveProducts, specialty, logs = [] }) {
   const [name, setName] = useState(""); const [cost, setCost] = useState("");
   const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("use");
   const [prodSpec, setProdSpec] = useState(specialty || "");
+  const [stockEdit, setStockEdit] = useState(null);
+  const [stockDraft, setStockDraft] = useState("");
+
+  // Typing what is on hand now resets the baseline; usage counts from that moment.
+  const setOnHand = (id, v) => {
+    const n = Number(v);
+    saveProducts(products.map((p) => p.id === id
+      ? (n > 0 ? { ...p, stocked: n, stockedAt: new Date().toISOString() } : { ...p, stocked: 0, stockedAt: null })
+      : p));
+    setStockEdit(null); setStockDraft("");
+  };
+  const low = products
+    .map((p) => ({ p, s: stockFor(p, logs) }))
+    .filter((x) => isLowStock(x.s));
   const add = () => {
     if (!name || !cost) return;
     saveProducts([...products, { id: uid(), name: name.trim(), cost: Number(cost) || 0, amount: Number(amount) || 0, unit: unit || "use", specialty: prodSpec || undefined, stock: 0 }]);
@@ -1603,21 +1649,56 @@ function Inventory({ products, saveProducts, specialty }) {
         <button type="button" className="soli-tradebtn" style={{ marginBottom: 16 }} onClick={loadStarters}>Load starter products for {specialtyLabel(specialty)}</button>
       )}
       {products.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0, marginBottom: 16 }}>No products yet. Add your supplies below so Soli can fold their cost into every profit calculation.</p>}
+      {low.length > 0 && (
+        <section className="soli-block soli-watch" style={{ marginBottom: 20 }}>
+          <div className="soli-blockhead"><AlertTriangle size={18} strokeWidth={1.9} /><h2>Running low</h2></div>
+          <p className="soli-note">Based on what you said was on hand, minus what your logged services have used.</p>
+          {low.map(({ p, s }) => (
+            <div className="soli-watchrow" key={p.id}>
+              <span>
+                {p.name}
+                <small style={{ display: "block", color: "var(--ink2)", fontSize: 12 }}>
+                  {s.remaining <= 0
+                    ? "none left"
+                    : `${round2(s.remaining)} ${p.unit} left${s.servicesLeft !== null ? `, about ${s.servicesLeft} more ${s.servicesLeft === 1 ? "service" : "services"}` : ""}`}
+                </small>
+              </span>
+              <span className="soli-watchval">{s.remaining <= 0 ? "0" : Math.round(s.pct * 100) + "%"}</span>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="soli-invtable">
-        <div className="soli-invhead"><span>Product</span><span>Total cost</span><span>Amount</span><span>Unit</span><span>For</span><span></span></div>
-        {products.map(p => (
+        <div className="soli-invhead"><span>Product</span><span>Total cost</span><span>Amount</span><span>Unit</span><span>On hand</span><span>For</span><span></span></div>
+        {products.map(p => {
+          const s = stockFor(p, logs);
+          return (
           <div className="soli-invrow" key={p.id}>
             <input className="soli-input slim" value={p.name} onChange={e => upd(p.id, "name", e.target.value)} />
             <input className="soli-input slim" type="number" value={p.cost} onChange={e => upd(p.id, "cost", e.target.value)} />
             <input className="soli-input slim" type="number" placeholder="opt" value={p.amount || ""} onChange={e => upd(p.id, "amount", e.target.value)} />
             <input className="soli-input slim" value={p.unit} onChange={e => upd(p.id, "unit", e.target.value)} />
+            {stockEdit === p.id ? (
+              <input className="soli-input slim" type="number" autoFocus placeholder={`How much now`}
+                value={stockDraft} onChange={(e) => setStockDraft(e.target.value)}
+                onBlur={() => setOnHand(p.id, stockDraft)}
+                onKeyDown={(e) => { if (e.key === "Enter") setOnHand(p.id, stockDraft); if (e.key === "Escape") { setStockEdit(null); setStockDraft(""); } }} />
+            ) : (
+              <button type="button" className={"soli-stockbtn" + (isLowStock(s) ? " low" : "")}
+                title={s ? `${round2(s.used)} ${p.unit} used since you last set this` : "Set how much you have to start tracking"}
+                onClick={() => { setStockEdit(p.id); setStockDraft(s ? String(round2(s.remaining)) : ""); }}>
+                {s ? `${round2(s.remaining)} ${p.unit}` : "Track"}
+              </button>
+            )}
             <select className="soli-input slim" value={p.specialty || ""} onChange={e => upd(p.id, "specialty", e.target.value)}>
               <option value="">Everyone</option>
-              {SPECIALTIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              {SPECIALTIES.map(s2 => <option key={s2.key} value={s2.key}>{s2.label}</option>)}
             </select>
             <button className="soli-iconbtn" onClick={() => del(p.id)}><Trash2 size={15} /></button>
           </div>
-        ))}
+          );
+        })}
       </div>
       <div className="soli-addbox">
         <div className="soli-addhead">Add a product</div>
@@ -2478,7 +2559,7 @@ function Styles() {
 .soli-editbtn:hover{border-color:var(--clay);color:var(--ink)}
 
 .soli-invtable{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:8px 12px;margin-bottom:20px;overflow-x:auto}
-.soli-invhead,.soli-invrow{display:grid;grid-template-columns:1.8fr 1fr 1fr .9fr 1.2fr 34px;gap:8px;align-items:center;min-width:520px}
+.soli-invhead,.soli-invrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .8fr 1fr 1.1fr 34px;gap:8px;align-items:center;min-width:640px}
 .soli-import{margin-bottom:20px}
 .soli-importtoggle{width:100%;border:1px dashed var(--line);background:var(--surface2);color:var(--clay-d);font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-importtoggle:hover{border-color:var(--clay)}
@@ -2617,6 +2698,10 @@ function Styles() {
 [data-theme="dark"] .soli-sliprow{border-top-color:#3f3025}
 .soli-sliptag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:var(--clay);padding:2px 7px;border-radius:20px;vertical-align:middle;margin-left:6px}
 .soli-dueskip{font-size:12px;color:var(--ink2)}
+.soli-stockbtn{font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:8px 6px;cursor:pointer;transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.soli-stockbtn:hover{border-color:var(--clay)}
+.soli-stockbtn.low{background:#F6E5DA;border-color:#E8C4B0;color:var(--clay-d)}
+[data-theme="dark"] .soli-stockbtn.low{background:#3a271e;border-color:#5a3a2b;color:#e29a75}
 .soli-exprow{display:grid;grid-template-columns:150px 1.2fr 1.4fr 130px;gap:10px;margin-bottom:10px}
 @media(max-width:640px){.soli-exprow{grid-template-columns:1fr 1fr}}
 .soli-exprow .soli-input{margin:0}
