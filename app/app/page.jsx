@@ -512,7 +512,8 @@ export default function Soli() {
             <button onClick={() => setRefBanner("")}>Got it</button>
           </div>
         )}
-        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} plan={plan} savePlan={savePlan} />}
+        {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} plan={plan} savePlan={savePlan}
+          settings={settings} templates={settings.templates || []} onHideOnboarding={() => saveSettings({ ...settings, hideOnboarding: true })} />}
         {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
@@ -536,7 +537,7 @@ export default function Soli() {
 }
 
 /* ------------------------------ DASHBOARD -------------------------------- */
-function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan }) {
+function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan, settings = {}, templates = [], onHideOnboarding }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
@@ -642,15 +643,14 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
       <div className="soli-page">
         <h1 className="soli-h1">Welcome to Soli</h1>
         <p className="soli-sub">Your numbers will appear here as soon as you start logging your own work.</p>
+        {!settings.hideOnboarding && (
+          <GettingStarted settings={settings} templates={templates} logs={logs} setTab={setTab} onDismiss={onHideOnboarding} />
+        )}
         <div className="soli-empty">
           <span className="soli-emptymark"><Sun size={26} strokeWidth={1.8} /></span>
           <h2>No services logged yet</h2>
           <p>Log your first service and Soli shows your real take-home, after product, booth rent &amp; taxes. Everything here is built from your own numbers.</p>
           <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log your first service</button>
-        </div>
-        <div className="soli-setuptip">
-          <span><SettingsIcon size={15} strokeWidth={1.9} /> First, set your <b>booth rent</b> &amp; <b>tax rate</b> so every number is truly yours.</span>
-          <button onClick={() => setTab("settings")}>Open Settings</button>
         </div>
         <p className="soli-emptyhint">Just exploring? You can load a sample data set from <b>Settings</b> to see how it all works, then clear it anytime.</p>
       </div>
@@ -687,6 +687,10 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
           <span className="soli-herosub">set this aside, don't spend it</span>
         </div>
       </div>
+
+      {!settings.hideOnboarding && (
+        <GettingStarted settings={settings} templates={templates} logs={logs} setTab={setTab} onDismiss={onHideOnboarding} />
+      )}
 
       <GoalCard goal={goal} stats={goalStats} savePlan={savePlan} plan={plan} />
 
@@ -796,6 +800,78 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
 
       <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log a service</button>
     </div>
+  );
+}
+
+/* ---------------------------- GETTING STARTED ---------------------------- */
+/* Shown only while setup is unfinished, then it disappears for good. Steps are
+   worked out from real data rather than a stored "seen it" flag, so someone who
+   set things up before this existed never sees it at all. */
+function onboardingSteps({ settings, templates, logs }) {
+  const rentSet = settings.boothRentAmount !== undefined && settings.boothRentAmount !== "";
+  return [
+    {
+      key: "rent",
+      done: rentSet,
+      title: "Set your booth rent and tax rate",
+      why: "Every take-home figure is built on these, so Soli's numbers are only yours once they are set.",
+      cta: "Open Settings",
+      tab: "settings",
+    },
+    {
+      key: "services",
+      done: templates.length > 0,
+      title: "Add the services you offer",
+      why: "Pick your trade for a starter list, or paste your menu from your booking app. Logging becomes one tap after this.",
+      cta: "Add services",
+      tab: "log",
+    },
+    {
+      key: "log",
+      done: logs.length > 0,
+      title: "Log your first service",
+      why: "This is where your real take-home appears. It takes about twenty seconds.",
+      cta: "Log a service",
+      tab: "log",
+    },
+  ];
+}
+
+function GettingStarted({ settings, templates, logs, setTab, onDismiss }) {
+  const steps = onboardingSteps({ settings, templates, logs });
+  const doneCount = steps.filter((s) => s.done).length;
+  if (doneCount === steps.length) return null; // finished, so it stops appearing
+  const next = steps.find((s) => !s.done);
+
+  return (
+    <section className="soli-onboard">
+      <div className="soli-onboardtop">
+        <div>
+          <div className="soli-onboardtitle">Getting started</div>
+          <div className="soli-onboardcount">{doneCount} of {steps.length} done</div>
+        </div>
+        <button className="soli-linkbtn" onClick={onDismiss}>Hide</button>
+      </div>
+
+      <div className="soli-onboardtrack">
+        <div className="soli-onboardfill" style={{ width: Math.max(4, (doneCount / steps.length) * 100) + "%" }} />
+      </div>
+
+      <ol className="soli-onboardlist">
+        {steps.map((s) => (
+          <li key={s.key} className={"soli-onboardstep" + (s.done ? " done" : "") + (s === next ? " next" : "")}>
+            <span className="soli-onboardmark">{s.done ? "✓" : ""}</span>
+            <div className="soli-onboardbody">
+              <div className="soli-onboardname">{s.title}</div>
+              {s === next && <div className="soli-onboardwhy">{s.why}</div>}
+            </div>
+            {s === next && (
+              <button className="soli-onboardcta" onClick={() => setTab(s.tab)}>{s.cta}</button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -2686,11 +2762,6 @@ function Styles() {
 .soli-empty p{color:var(--ink2);font-size:14px;margin:0 0 10px;max-width:400px;line-height:1.5}
 .soli-empty .soli-cta{max-width:320px}
 .soli-emptyhint{margin-top:16px;font-size:12.5px;color:var(--ink2);text-align:center;line-height:1.5}
-.soli-setuptip{margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--line);border-radius:13px;padding:13px 16px;font-size:13.5px;color:var(--ink)}
-.soli-setuptip span{display:inline-flex;align-items:center;gap:8px;color:var(--ink2)}
-.soli-setuptip b{color:var(--ink)}
-.soli-setuptip button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;white-space:nowrap}
-.soli-setuptip button:hover{background:#000}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .soli-sliprow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #EDD8C8}
@@ -2713,6 +2784,23 @@ function Styles() {
 .soli-expnote{color:var(--ink2)}
 .soli-expamt{font-family:'Fraunces',serif;font-weight:600;color:var(--cost)}
 .soli-expactions{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.soli-onboard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
+.soli-onboardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.soli-onboardtitle{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-onboardcount{font-size:12.5px;color:var(--ink2);margin-top:1px}
+.soli-onboardtrack{height:6px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:11px 0 14px}
+.soli-onboardfill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--sage),var(--sage-d));transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.soli-onboardlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.soli-onboardstep{display:flex;align-items:flex-start;gap:11px}
+.soli-onboardmark{flex:none;width:21px;height:21px;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;margin-top:1px}
+.soli-onboardstep.done .soli-onboardmark{background:var(--sage-d);border-color:var(--sage-d)}
+.soli-onboardstep.next .soli-onboardmark{border-color:var(--clay)}
+.soli-onboardbody{flex:1;min-width:0}
+.soli-onboardname{font-size:14px;font-weight:500}
+.soli-onboardstep.done .soli-onboardname{color:var(--ink2);text-decoration:line-through}
+.soli-onboardwhy{font-size:12.5px;color:var(--ink2);margin-top:3px;line-height:1.45}
+.soli-onboardcta{flex:none;border:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;background:var(--clay);color:#fff;padding:8px 13px;border-radius:9px;white-space:nowrap;transition:.15s}
+.soli-onboardcta:hover{background:var(--clay-d)}
 .soli-goal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
 .soli-goal.met{border-color:#D3DBBC;background:linear-gradient(150deg,#EDF0E2,#E6EBD8)}
 [data-theme="dark"] .soli-goal.met{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
