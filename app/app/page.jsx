@@ -1142,6 +1142,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [dur, setDur] = useState("");
   const [tip, setTip] = useState("");
   const [when, setWhen] = useState(ymd(new Date().toISOString()));
+  const [lastVisit, setLastVisit] = useState(null);
   const [paySource, setPaySource] = useState("card");
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
@@ -1189,8 +1190,19 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100,
       qty: Object.keys(usedQty).length ? usedQty : undefined, date: at }, ...logs]);
     setSaved(true); setService(""); setPrice(""); setDur(""); setTip(""); setQty({}); setNewClient(""); setPaySource("card");
+    // Keep the client and date so another service from the same appointment can
+    // be added without re-entering who it was for, then reset once done.
+    setLastVisit({ clientId: cid, name: newClient.trim() || (clients.find((c) => c.id === cid) || {}).name || "", date: when });
     setWhen(ymd(new Date().toISOString()));
     setTimeout(() => setSaved(false), 2200);
+  };
+
+  const addAnother = () => {
+    if (!lastVisit) return;
+    setClientId(lastVisit.clientId);
+    setNewClient("");
+    setWhen(lastVisit.date);
+    setLastVisit(null);
   };
 
   const applyTemplate = (t) => {
@@ -1418,6 +1430,13 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
       )}
 
       <button className="soli-cta" onClick={submit} disabled={!service || !priceN || !durN}>{saved ? "Saved ✓" : "Save service"}</button>
+
+      {lastVisit && (
+        <div className="soli-another">
+          <span>Did {lastVisit.name || "this client"} have anything else done in the same appointment?</span>
+          <button type="button" onClick={addAnother}>Add another service</button>
+        </div>
+      )}
       {service && priceN > 0 && durN > 0 && (
         <button className="soli-ghost soli-tplsave" onClick={saveAsTemplate}>{tplSaved ? "Saved as template ✓" : "Save this as a template"}</button>
       )}
@@ -1700,12 +1719,29 @@ function Planner({ plan, savePlan, taxRate, logs = [], boothRate = 0 }) {
 }
 
 /* ------------------------------- CLIENTS --------------------------------- */
+/* Distinct days a client was actually seen, oldest first.
+
+   One appointment often covers several services (a lash fill plus a brow wax),
+   and each is logged separately so per-service profit stays accurate. Counting
+   those as separate visits would be wrong: the gaps between them are zero,
+   which drags a client's median gap to nothing and makes their rhythm
+   unreadable. Collapsing to calendar days keeps both numbers honest. */
+function visitDays(clientLogs) {
+  const days = new Set();
+  (clientLogs || []).forEach((l) => {
+    const d = new Date(l.date);
+    d.setHours(0, 0, 0, 0);
+    days.add(d.getTime());
+  });
+  return [...days].sort((a, b) => a - b);
+}
+
 /* Works out each client's own rhythm from their visit history, rather than the
    rebook weeks field, which most people leave on the default. Uses the median
    gap so one long break (a holiday, an illness) does not skew their normal.
    Needs three visits, since two gives a single gap and no sense of typical. */
 function riskFor(clientLogs) {
-  const dates = clientLogs.map((l) => new Date(l.date).getTime()).sort((a, b) => a - b);
+  const dates = visitDays(clientLogs);
   if (dates.length < 3) return null;
   const gaps = [];
   for (let i = 1; i < dates.length; i++) gaps.push(dates[i] - dates[i - 1]);
@@ -1731,7 +1767,9 @@ function ClientsView({ clients, logs, saveClients, rent }) {
   const stats = (cid) => {
     const ls = logs.filter(l => l.clientId === cid);
     const profit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0);
-    return { visits: ls.length, profit, ls: ls.sort((a, b) => new Date(b.date) - new Date(a.date)) };
+    // Visits are days seen, not services logged, so a bundled appointment
+    // counts once rather than inflating someone's loyalty.
+    return { visits: visitDays(ls).length, services: ls.length, profit, ls: ls.sort((a, b) => new Date(b.date) - new Date(a.date)) };
   };
   const remove = (id) => { saveClients(clients.filter(c => c.id !== id)); setOpen(null); };
   const startEdit = (c) => { setEditing(c.id); setForm({ name: c.name, phone: c.phone || "", notes: c.notes || "", rebookWeeks: c.rebookWeeks || 4 }); };
@@ -1744,8 +1782,11 @@ function ClientsView({ clients, logs, saveClients, rent }) {
         const ls = logs.filter((l) => l.clientId === c.id);
         const risk = riskFor(ls);
         if (!risk) return null;
-        const perVisit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0) / ls.length;
-        return { ...c, risk, perVisit, visits: ls.length };
+        // Divide by visits, not services, so "a visit is worth this much"
+        // reflects a whole appointment rather than one line of it.
+        const days = visitDays(ls).length || 1;
+        const perVisit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0) / days;
+        return { ...c, risk, perVisit, visits: days };
       })
       .filter(Boolean)
       .sort((a, b) => (b.risk.ratio * Math.max(b.perVisit, 1)) - (a.risk.ratio * Math.max(a.perVisit, 1)));
@@ -1796,7 +1837,11 @@ function ClientsView({ clients, logs, saveClients, rent }) {
         {clients.map(c => ({ ...c, s: stats(c.id) })).sort((a, b) => b.s.profit - a.s.profit).map(c => (
           <div key={c.id} className="soli-clientcard" onClick={() => setOpen(open === c.id ? null : c.id)}>
             <div className="soli-clienttop">
-              <div><div className="soli-clientname">{c.name}</div><div className="soli-clientmeta">{c.s.visits} visits · last {fmtDate(c.lastVisit)}</div></div>
+              <div><div className="soli-clientname">{c.name}</div><div className="soli-clientmeta">
+                {c.s.visits} {c.s.visits === 1 ? "visit" : "visits"}
+                {c.s.services > c.s.visits ? ` · ${c.s.services} services` : ""}
+                {" · last "}{fmtDate(c.lastVisit)}
+              </div></div>
               <div className="soli-clientprofit">{money2(c.s.profit)}<small>lifetime profit</small></div>
             </div>
             {open === c.id && (
@@ -2971,6 +3016,10 @@ function Styles() {
 }
 [data-theme="dark"] .soli-tabbar{background:rgba(24,20,16,.94)}
 
+.soli-another{margin-top:12px;background:var(--surface2);border:1px dashed var(--line);border-radius:12px;padding:13px 15px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
+.soli-another button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;white-space:nowrap}
+.soli-another button:hover{background:#000}
+[data-theme="dark"] .soli-another button:hover{background:#F2E9DB}
 .soli-simbox{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
 .soli-simrows{display:flex;flex-direction:column;gap:10px;margin:14px 0}
 .soli-simrow{display:grid;grid-template-columns:1fr 148px 96px;gap:10px;align-items:center}
