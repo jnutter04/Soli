@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
-  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift, Receipt
+  Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift, Receipt, MoreHorizontal
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -231,6 +231,7 @@ export default function Soli() {
   const [email, setEmail] = useState("");
   const [tab, setTab] = useState("dash");
   const [theme, setTheme] = useState("light");
+  const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => { setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light"); }, []);
   const toggleTheme = () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -491,6 +492,53 @@ export default function Soli() {
           </button>
         </nav>
       </header>
+
+      {/* Phone navigation. Nine items wrapped across three rows on a small
+          screen, so the ones used daily move to a thumb-reachable bar and the
+          rest live behind More. The header nav is hidden at this width. */}
+      <nav className="soli-tabbar">
+        {[
+          { id: "dash", label: "Home", Icon: LayoutDashboard },
+          { id: "week", label: "Weekly", Icon: CalendarDays },
+          { id: "log", label: "Log", Icon: PlusCircle, primary: true },
+          { id: "clients", label: "Clients", Icon: Users },
+        ].map(({ id, label, Icon, primary }) => (
+          <button key={id} onClick={() => { setTab(id); setMoreOpen(false); }}
+            className={"soli-tabbtn" + (tab === id ? " active" : "") + (primary ? " primary" : "")}>
+            <Icon size={20} strokeWidth={1.9} /><span>{label}</span>
+          </button>
+        ))}
+        <button className={"soli-tabbtn" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen}>
+          <MoreHorizontal size={20} strokeWidth={1.9} /><span>More</span>
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <div className="soli-sheet soli-sheet-bottom" onClick={() => setMoreOpen(false)}>
+          <div className="soli-moresheet" onClick={(e) => e.stopPropagation()}>
+            <div className="soli-sheethead">
+              <h2>More</h2>
+              <button className="soli-sheetx" onClick={() => setMoreOpen(false)} aria-label="Close">&times;</button>
+            </div>
+            <div className="soli-morelist">
+              {nav.filter((n) => !["dash", "week", "log", "clients"].includes(n.id)).map(({ id, label, Icon }) => (
+                <button key={id} className={"soli-moreitem" + (tab === id ? " active" : "")}
+                  onClick={() => { setTab(id); setMoreOpen(false); }}>
+                  <Icon size={18} strokeWidth={1.9} /><span>{label}</span>
+                </button>
+              ))}
+              <button className="soli-moreitem" onClick={toggleTheme}>
+                {theme === "dark" ? <Sun size={18} strokeWidth={1.9} /> : <Moon size={18} strokeWidth={1.9} />}
+                <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+              </button>
+              <button className="soli-moreitem danger" onClick={signOut}>
+                <LogOut size={18} strokeWidth={1.9} /><span>Sign out</span>
+              </button>
+            </div>
+            {email && <p className="soli-help" style={{ textAlign: "center" }}>Signed in as {email}</p>}
+          </div>
+        </div>
+      )}
 
       <main className="soli-main">
         {!comped && !isSubscribed && !inGrace && inTrial && (
@@ -2784,6 +2832,31 @@ function Styles() {
 .soli-expnote{color:var(--ink2)}
 .soli-expamt{font-family:'Fraunces',serif;font-weight:600;color:var(--cost)}
 .soli-expactions{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+/* Phone tab bar. Hidden on wider screens, where the header nav fits fine. */
+.soli-tabbar{display:none}
+.soli-sheet-bottom{align-items:flex-end;padding:0}
+.soli-moresheet{width:100%;background:var(--surface);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-height:80vh;overflow-y:auto}
+.soli-morelist{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.soli-moreitem{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit;font-size:15px;color:var(--ink);padding:13px 8px;border-radius:11px}
+.soli-moreitem:hover{background:var(--surface2)}
+.soli-moreitem.active{background:var(--ink);color:var(--bg)}
+.soli-moreitem.danger{color:var(--clay-d)}
+@media(max-width:760px){
+  .soli-nav{display:none}
+  .soli-header{padding:12px 18px}
+  .soli-main{padding-bottom:96px}
+  .soli-tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(255,253,249,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .soli-tabbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:600;
+    color:var(--ink2);padding:7px 2px;border-radius:11px}
+  .soli-tabbtn.active{color:var(--clay-d)}
+  .soli-tabbtn.primary{color:#fff;background:var(--clay);margin:0 4px;box-shadow:0 4px 12px rgba(188,107,76,.3)}
+  .soli-tabbtn.primary.active{color:#fff;background:var(--clay-d)}
+}
+[data-theme="dark"] .soli-tabbar{background:rgba(24,20,16,.94)}
+
 .soli-onboard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
 .soli-onboardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .soli-onboardtitle{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
