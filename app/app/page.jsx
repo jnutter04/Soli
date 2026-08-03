@@ -567,7 +567,7 @@ export default function Soli() {
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
           templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty}
           updateLog={updateLog} deleteLog={deleteLog} />}
-        {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} />}
+        {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} logs={logs} boothRate={rent} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} logs={logs} />}
         {tab === "exp" && <ExpensesView expenses={expenses} saveExpenses={saveExpenses} ready={expensesReady} />}
@@ -1539,7 +1539,119 @@ function Field({ label, children }) {
 }
 
 /* ------------------------------ PLANNER ---------------------------------- */
-function Planner({ plan, savePlan, taxRate }) {
+/* --------------------------- PRICE SIMULATOR ----------------------------- */
+/* Replays the last 90 days at different prices. Only the price changes: the
+   same appointments, product costs and chair time are held constant, so the
+   difference shown is purely the price change and nothing is invented. */
+function PriceSimulator({ logs, rent, taxRate }) {
+  const t = taxRate / 100;
+  const since = Date.now() - 90 * 864e5;
+
+  const services = useMemo(() => {
+    const m = {};
+    logs.forEach((l) => {
+      if (new Date(l.date).getTime() < since) return;
+      const k = l.service;
+      const booth = (l.durationMin / 60) * rent;
+      const s = m[k] || (m[k] = { name: k, count: 0, revenue: 0, product: 0, booth: 0 });
+      s.count++; s.revenue += Number(l.price) || 0;
+      s.product += Number(l.productCost) || 0; s.booth += booth;
+    });
+    return Object.values(m)
+      .map((s) => ({ ...s, avgPrice: s.revenue / s.count, profit: s.revenue - s.product - s.booth }))
+      .sort((a, b) => b.count - a.count);
+  }, [logs, rent, since]);
+
+  const [prices, setPrices] = useState({});
+  const priceFor = (s) => {
+    const v = prices[s.name];
+    return v === undefined || v === "" ? s.avgPrice : Math.max(0, Number(v) || 0);
+  };
+  const bump = (s, pct) => setPrices((p) => ({ ...p, [s.name]: String(round2(s.avgPrice * (1 + pct / 100))) }));
+  const reset = () => setPrices({});
+
+  const totals = useMemo(() => {
+    let now = 0, next = 0;
+    services.forEach((s) => {
+      now += s.profit;
+      next += priceFor(s) * s.count - s.product - s.booth;
+    });
+    return { now: now * (1 - t), next: next * (1 - t) };
+  }, [services, prices, t]);
+
+  const diff = totals.next - totals.now;
+  const monthly = diff / 3; // 90 days is roughly three months
+  const changed = services.some((s) => Math.abs(priceFor(s) - s.avgPrice) > 0.005);
+
+  if (services.length === 0) {
+    return (
+      <div className="soli-simbox">
+        <div className="soli-datahead">What if I raised my prices?</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Log a few services and you can try new prices here to see what they would have earned you.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="soli-simbox">
+      <div className="soli-datahead">What if I raised my prices?</div>
+      <p className="soli-help" style={{ marginTop: 0 }}>
+        Your last 90 days replayed at prices you choose. Everything else stays as it was, so this shows the effect of the price alone.
+      </p>
+
+      <div className="soli-simrows">
+        {services.map((s) => {
+          const np = priceFor(s);
+          const delta = (np - s.avgPrice) * s.count * (1 - t) / 3;
+          return (
+            <div className="soli-simrow" key={s.name}>
+              <div className="soli-simname">
+                {s.name}
+                <small>{s.count}x · now {money2(s.avgPrice)}</small>
+              </div>
+              <div className="soli-simctrl">
+                <input className="soli-input slim" type="number" inputMode="decimal"
+                  value={prices[s.name] ?? round2(s.avgPrice)}
+                  onChange={(e) => setPrices((p) => ({ ...p, [s.name]: e.target.value }))} />
+                <button type="button" className="soli-simbump" onClick={() => bump(s, 10)}>+10%</button>
+              </div>
+              <div className={"soli-simdelta" + (delta > 0.005 ? " up" : delta < -0.005 ? " down" : "")}>
+                {Math.abs(delta) < 0.005 ? "" : (delta > 0 ? "+" : "") + money2(delta) + "/mo"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className={"soli-simtotal" + (changed ? " on" : "")}>
+        <div className="soli-simtotalrow"><span>Kept over those 90 days</span><b>{money2(totals.now)}</b></div>
+        {changed && (
+          <>
+            <div className="soli-simtotalrow"><span>At your new prices</span><b>{money2(totals.next)}</b></div>
+            <div className="soli-simtotalrow main">
+              <span>{diff >= 0 ? "Extra" : "Less"} each month</span>
+              <b className={diff >= 0 ? "up" : "down"}>{diff >= 0 ? "+" : ""}{money2(monthly)}</b>
+            </div>
+          </>
+        )}
+      </div>
+
+      {changed && (
+        <>
+          <p className="soli-simnote">
+            This assumes the same clients book the same work at the new prices. Some may not, so treat it as the best case rather than a forecast. Trying a new price with new clients first is a common way to test it without risking your regulars.
+          </p>
+          <button className="soli-editbtn" onClick={reset}>Reset prices</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* boothRate is the hourly chair cost used in profit math. It is deliberately
+   not called rent here, since this screen already uses `rent` for the monthly
+   booth rent the user is planning around. */
+function Planner({ plan, savePlan, taxRate, logs = [], boothRate = 0 }) {
   const set = (k, v) => savePlan({ ...plan, [k]: Math.max(0, Number(v) || 0) });
   const t = taxRate / 100;
   const goal = plan.goal, rent = plan.monthlyRent, avg = plan.avgPrice, cap = plan.capacity;
@@ -1581,6 +1693,8 @@ function Planner({ plan, savePlan, taxRate }) {
           To hit your goal at {cap}/week, charge about <b>{money2(priceAtCap)}</b> per service on average.
         </div>
       </div>
+
+      <PriceSimulator logs={logs} rent={boothRate} taxRate={taxRate} />
     </div>
   );
 }
@@ -2857,6 +2971,31 @@ function Styles() {
 }
 [data-theme="dark"] .soli-tabbar{background:rgba(24,20,16,.94)}
 
+.soli-simbox{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
+.soli-simrows{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+.soli-simrow{display:grid;grid-template-columns:1fr 148px 96px;gap:10px;align-items:center}
+@media(max-width:560px){.soli-simrow{grid-template-columns:1fr 132px;grid-template-areas:"name ctrl" "delta delta";row-gap:4px}
+  .soli-simname{grid-area:name}.soli-simctrl{grid-area:ctrl}.soli-simdelta{grid-area:delta;text-align:left}}
+.soli-simname{font-size:14px;font-weight:500;display:flex;flex-direction:column;min-width:0}
+.soli-simname small{font-weight:400;color:var(--ink2);font-size:11.5px}
+.soli-simctrl{display:flex;align-items:center;gap:6px}
+.soli-simctrl .soli-input{margin:0;width:78px}
+.soli-simbump{border:1px solid var(--line);background:var(--surface2);color:var(--ink2);font-family:inherit;font-size:11.5px;font-weight:600;padding:7px 8px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.soli-simbump:hover{border-color:var(--clay);color:var(--clay-d)}
+.soli-simdelta{font-size:12.5px;font-weight:600;text-align:right;color:var(--ink2)}
+.soli-simdelta.up{color:var(--sage-d)}
+.soli-simdelta.down{color:var(--clay-d)}
+.soli-simtotal{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.soli-simtotal.on{background:linear-gradient(150deg,#EDF0E2,#E3E8D2);border-color:#D3DBBC}
+[data-theme="dark"] .soli-simtotal.on{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
+.soli-simtotalrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13.5px;color:var(--ink2);padding:3px 0}
+.soli-simtotalrow b{font-family:'Fraunces',serif;font-size:16px;color:var(--ink)}
+.soli-simtotalrow.main{border-top:1px solid rgba(0,0,0,.10);margin-top:6px;padding-top:9px;font-size:14.5px;color:var(--ink)}
+[data-theme="dark"] .soli-simtotalrow.main{border-top-color:rgba(255,255,255,.12)}
+.soli-simtotalrow.main b{font-size:21px}
+.soli-simtotalrow b.up{color:var(--profit)}
+.soli-simtotalrow b.down{color:var(--clay-d)}
+.soli-simnote{font-size:12px;color:var(--ink2);line-height:1.5;margin:12px 0 10px}
 .soli-onboard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
 .soli-onboardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .soli-onboardtitle{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
