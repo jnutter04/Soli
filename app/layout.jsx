@@ -13,6 +13,7 @@ export const metadata = {
   title,
   description,
   alternates: { canonical: "/" },
+  verification: { google: "jm-VHJNBe-27OaGamQ9r9HTPyNmmXrgemUGj2G24A6s" },
   keywords: [
     "salon bookkeeping",
     "booth rent calculator",
