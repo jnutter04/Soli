@@ -3,22 +3,34 @@ import { Analytics } from "@vercel/analytics/next";
 import SWRegister from "@/components/SWRegister";
 import ErrorReporter from "@/components/ErrorReporter";
 
-const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : "http://localhost:3000";
+import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
 
-const title = "Soli: know what you actually keep";
-const description =
-  "Soli helps service pros see their real take-home after product, booth rent & taxes.";
+const title = SITE_TITLE;
+const description = SITE_DESCRIPTION;
 
 export const metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   title,
   description,
+  alternates: { canonical: "/" },
+  keywords: [
+    "salon bookkeeping",
+    "booth rent calculator",
+    "beauty business profit",
+    "esthetician income tracker",
+    "how much should I charge",
+    "self employed beauty taxes",
+  ],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
   openGraph: {
     title,
     description,
-    siteName: "Soli",
+    siteName: SITE_NAME,
+    url: SITE_URL,
     type: "website",
   },
   twitter: {

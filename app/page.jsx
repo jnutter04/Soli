@@ -1,5 +1,29 @@
 import Link from "next/link";
 import RefCapture from "@/components/RefCapture";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
+
+/* Structured data so search engines can describe Soli accurately in results.
+   Everything stated here has to match what the product actually does and
+   charges, since a mismatch is both a ranking penalty and a broken promise. */
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: SITE_NAME,
+  url: SITE_URL,
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web browser",
+  description: SITE_DESCRIPTION,
+  offers: {
+    "@type": "Offer",
+    price: "12",
+    priceCurrency: "USD",
+    description: "14-day free trial, then 12 US dollars per month",
+  },
+  audience: {
+    "@type": "Audience",
+    audienceType: "Estheticians, barbers, hair stylists and nail technicians",
+  },
+};
 
 /* Reusable sun mark (matches the app + favicon) */
 function SunMark({ size = 20, stroke = 1.8, color }) {
@@ -24,6 +48,10 @@ function Check() {
 export default function Landing() {
   return (
     <div className="lp">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <LandingStyles />
       <RefCapture />
 
