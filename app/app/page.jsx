@@ -7,6 +7,7 @@ import {
   Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift, Receipt, MoreHorizontal
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
+import CsvImport from "@/components/CsvImport";
 import PushToggle from "@/components/PushToggle";
 import InstallPrompt from "@/components/InstallPrompt";
 import { createClient } from "@/lib/supabase/client";
@@ -384,6 +385,46 @@ export default function Soli() {
   };
 
   const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
+
+  /* Writes imported services in, matching clients by name so a history import
+     lands against the people already in the account instead of duplicating
+     them. lastVisit only moves forward, since importing old work should not
+     make someone look freshly seen and drop them out of rebooking reminders. */
+  const importServices = (incoming) => {
+    const byName = {};
+    clients.forEach((c) => { byName[c.name.trim().toLowerCase()] = c; });
+
+    const newClients = [];
+    const touched = {};
+    const newLogs = incoming.map((r) => {
+      let cid = "";
+      const key = r.client.trim().toLowerCase();
+      if (key) {
+        const hit = byName[key];
+        if (hit) cid = hit.id;
+        else {
+          const made = { id: uid(), name: r.client.trim(), phone: "", notes: "", rebookWeeks: 4, lastVisit: r.date };
+          byName[key] = made; newClients.push(made); cid = made.id;
+        }
+        if (!touched[cid] || new Date(r.date) > new Date(touched[cid])) touched[cid] = r.date;
+      }
+      return {
+        id: uid(), clientId: cid, service: r.service, price: r.price,
+        durationMin: r.durationMin, tip: r.tip, paySource: r.paySource,
+        productCost: 0, date: r.date, imported: true,
+      };
+    });
+
+    const merged = [...clients, ...newClients].map((c) => {
+      const seen = touched[c.id];
+      if (!seen) return c;
+      return (!c.lastVisit || new Date(seen) > new Date(c.lastVisit)) ? { ...c, lastVisit: seen } : c;
+    });
+
+    saveClients(merged);
+    saveLogs([...newLogs, ...logs].sort((a, b) => new Date(b.date) - new Date(a.date)));
+    return { services: newLogs.length, clients: newClients.length };
+  };
   // A mistyped price would otherwise stay wrong forever and quietly skew every
   // figure, including the tax export, so logged services must be fixable.
   const updateLog = (id, patch) => saveLogs(logs.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -575,7 +616,7 @@ export default function Soli() {
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
           comped={comped} onRedeem={redeemCode}
-          logs={logs} clients={clients} rent={rent} expenses={expenses} products={products} plan={plan} onDeleteAccount={deleteAccount} />}
+          logs={logs} clients={clients} rent={rent} expenses={expenses} products={products} plan={plan} onDeleteAccount={deleteAccount} onImportServices={importServices} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -2003,11 +2044,13 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount, onImportServices }) {
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState("");
   const [delBusy, setDelBusy] = useState(false);
   const [delErr, setDelErr] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importNote, setImportNote] = useState("");
   const runDelete = async () => {
     setDelBusy(true); setDelErr("");
     const res = await onDeleteAccount();
@@ -2133,6 +2176,32 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <p className="soli-help" style={{ marginTop: 0 }}>
           Everything Soli holds for you, in one place. It saves to your account, so it follows you to any device you sign in on.
         </p>
+
+        {importOpen ? (
+          <CsvImport
+            clients={clients}
+            logs={logs}
+            money2={money2}
+            onClose={() => setImportOpen(false)}
+            onImport={(rows) => {
+              const res = onImportServices(rows);
+              setImportOpen(false);
+              setImportNote(
+                `Brought in ${res.services} ${res.services === 1 ? "service" : "services"}` +
+                (res.clients ? ` and added ${res.clients} new ${res.clients === 1 ? "client" : "clients"}` : "") + "."
+              );
+            }}
+          />
+        ) : (
+          <div className="soli-subblock">
+            <div className="soli-subhead">Bring in past work</div>
+            <p className="soli-help" style={{ marginTop: 0 }}>
+              Moving from another app? Import your appointments or payments so your history, trends and tax totals start from the beginning rather than today.
+            </p>
+            <button className="soli-ghost" onClick={() => { setImportNote(""); setImportOpen(true); }}>Import from a file</button>
+            {importNote && <p className="soli-help">{importNote}</p>}
+          </div>
+        )}
 
         <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
 
@@ -3142,6 +3211,26 @@ function Styles() {
 .soli-stockbtn:hover{border-color:var(--clay)}
 .soli-stockbtn.low{background:#F6E5DA;border-color:#E8C4B0;color:var(--clay-d)}
 [data-theme="dark"] .soli-stockbtn.low{background:#3a271e;border-color:#5a3a2b;color:#e29a75}
+.soli-mapgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.soli-mapgrid > *{min-width:0}
+.soli-mapitem{display:flex;flex-direction:column;gap:5px;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
+.soli-mapitem .soli-input{margin:0}
+.soli-importwarn{background:#F6E5DA;border:1px solid #E8C4B0;color:var(--clay-d);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:13px;line-height:1.5}
+[data-theme="dark"] .soli-importwarn{background:#3a271e;border-color:#5a3a2b;color:#e8b79c}
+.soli-importwarn .soli-tradebtn.on{background:var(--clay);color:#fff;border-color:var(--clay)}
+.soli-imptable{max-height:340px;overflow-y:auto;overflow-x:auto;border:1px solid var(--line);border-radius:12px;padding:8px}
+.soli-improw{display:grid;grid-template-columns:24px 130px 1.2fr 1.4fr 80px 70px 110px;gap:8px;align-items:center;padding:5px 2px;min-width:700px}
+.soli-improw > *{min-width:0}
+.soli-improw .soli-input{margin:0}
+.soli-improw.dupe{opacity:.5}
+.soli-improw.bad{background:#F6E5DA;border-radius:8px}
+[data-theme="dark"] .soli-improw.bad{background:#3a271e}
+.soli-impnote{font-size:11px;color:var(--clay-d);white-space:nowrap}
+@media(max-width:720px){
+  /* The review table cannot shrink to a phone without becoming unreadable, so
+     it scrolls sideways inside its own box rather than stretching the page. */
+  .soli-imptable{max-height:420px}
+}
 .soli-exprow{display:grid;grid-template-columns:150px 1.2fr 1.4fr 130px;gap:10px;margin-bottom:10px}
 @media(max-width:640px){.soli-exprow{grid-template-columns:1fr 1fr}}
 .soli-exprow .soli-input{margin:0}
