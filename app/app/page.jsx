@@ -575,7 +575,7 @@ export default function Soli() {
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
           comped={comped} onRedeem={redeemCode}
-          logs={logs} clients={clients} rent={rent} expenses={expenses} onDeleteAccount={deleteAccount} />}
+          logs={logs} clients={clients} rent={rent} expenses={expenses} products={products} plan={plan} onDeleteAccount={deleteAccount} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -2003,7 +2003,7 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], onDeleteAccount }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount }) {
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState("");
   const [delBusy, setDelBusy] = useState(false);
@@ -2105,6 +2105,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
           <span>Email me a short summary of what I kept each week.</span>
         </label>
       </Field>
+
+      <DataExport settings={settings} clients={clients} products={products} logs={logs} plan={plan} expenses={expenses} />
 
       <PushToggle />
 
@@ -2361,6 +2363,81 @@ function ExpensesView({ expenses, saveExpenses, ready }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------- DATA EXPORT -------------------------------- */
+/* A full copy of everything, so the data in Soli is genuinely the user's and
+   they can leave with it. The JSON keeps every field exactly as stored; the
+   CSVs are for reading and for handing to someone else. */
+function DataExport({ settings, clients, products, logs, plan, expenses }) {
+  const [note, setNote] = useState("");
+
+  const stamp = ymd(new Date().toISOString());
+
+  const exportAll = () => {
+    const payload = {
+      soliExport: 1,
+      exportedAt: new Date().toISOString(),
+      counts: {
+        clients: clients.length, products: products.length,
+        services: logs.length, expenses: expenses.length,
+      },
+      settings, plan, clients, products, logs, expenses,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `soli-backup-${stamp}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNote(`Saved everything: ${logs.length} services, ${clients.length} clients, ${expenses.length} expenses.`);
+  };
+
+  const exportClients = () => {
+    const head = ["Name", "Phone", "Notes", "Rebook every (weeks)", "Last visit", "Visits", "Lifetime revenue"];
+    const body = clients.map((c) => {
+      const ls = logs.filter((l) => l.clientId === c.id);
+      const revenue = ls.reduce((s, l) => s + (Number(l.price) || 0) + (Number(l.tip) || 0), 0);
+      return [c.name, c.phone || "", c.notes || "", c.rebookWeeks || "",
+        c.lastVisit ? ymd(c.lastVisit) : "", visitDays(ls).length, round2(revenue)];
+    });
+    download(`soli-clients-${stamp}.csv`, toCsv([head, ...body]));
+    setNote(`Saved ${clients.length} clients.`);
+  };
+
+  const exportExpenses = () => {
+    const head = ["Date", "Category", "Note", "Amount"];
+    const body = [...expenses]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((e) => [ymd(e.date), e.category, e.note || "", round2(e.amount)]);
+    download(`soli-expenses-${stamp}.csv`, toCsv([head, ...body]));
+    setNote(`Saved ${expenses.length} expenses.`);
+  };
+
+  const nothingYet = logs.length === 0 && clients.length === 0 && expenses.length === 0;
+
+  return (
+    <div className="soli-datatools">
+      <div className="soli-datahead">Download your data</div>
+      <p className="soli-help" style={{ marginTop: 0 }}>
+        Your records belong to you. Take a backup whenever you like, or keep a copy somewhere safe before making big changes.
+      </p>
+      {nothingYet ? (
+        <p className="soli-help">Nothing to download yet. Log a service first.</p>
+      ) : (
+        <>
+          <button className="soli-cta sm" onClick={exportAll}>Download everything</button>
+          <div className="soli-refactions" style={{ marginTop: 10 }}>
+            <button className="soli-ghost" onClick={exportClients} disabled={clients.length === 0}>Clients (CSV)</button>
+            <button className="soli-ghost" onClick={exportExpenses} disabled={expenses.length === 0}>Expenses (CSV)</button>
+          </div>
+          {note && <p className="soli-help">{note}</p>}
+          <p className="soli-help">
+            The full download is a JSON file holding every field Soli stores. Soli cannot read a backup back in yet, so treat it as a copy rather than a restore.
+          </p>
+        </>
       )}
     </div>
   );
