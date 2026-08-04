@@ -71,6 +71,20 @@ export default function PushToggle() {
     setBusy(false);
   };
 
+  const sendTest = async () => {
+    setBusy(true); setNote("");
+    try {
+      const r = await fetch("/api/push/test", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      setNote(r.ok
+        ? `Sent to ${d.sent} ${d.sent === 1 ? "device" : "devices"}. It should appear in a moment.`
+        : d.error || "Could not send the test.");
+    } catch {
+      setNote("Could not reach the server.");
+    }
+    setBusy(false);
+  };
+
   const disable = async () => {
     setBusy(true); setNote("");
     try {
@@ -102,6 +116,11 @@ export default function PushToggle() {
       {enabled
         ? <button className="soli-ghost" onClick={disable} disabled={busy}>{busy ? "One moment…" : "Turn off on this device"}</button>
         : <button className="soli-cta sm" onClick={enable} disabled={busy}>{busy ? "One moment…" : "Turn on notifications"}</button>}
+      {enabled && (
+        <button className="soli-ghost" style={{ marginTop: 10 }} onClick={sendTest} disabled={busy}>
+          {busy ? "One moment…" : "Send a test notification"}
+        </button>
+      )}
       {note && <p className="soli-help">{note}</p>}
     </div>
   );
