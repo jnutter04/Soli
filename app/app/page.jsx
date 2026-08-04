@@ -2383,7 +2383,7 @@ function DataExport({ settings, clients, products, logs, plan, expenses }) {
 
   const stamp = ymd(new Date().toISOString());
 
-  const exportAll = () => {
+  const exportAll = async () => {
     const payload = {
       soliExport: 1,
       exportedAt: new Date().toISOString(),
@@ -2393,12 +2393,16 @@ function DataExport({ settings, clients, products, logs, plan, expenses }) {
       },
       settings, plan, clients, products, logs, expenses,
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `soli-backup-${stamp}.json`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNote(`Saved everything: ${logs.length} services, ${clients.length} clients, ${expenses.length} expenses.`);
+    try {
+      const how = await saveFile(`soli-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+      if (how === "cancelled") { setNote(""); return; }
+      setNote(
+        (how === "shared" ? "Choose where to keep it. " : "") +
+        `Saved everything: ${logs.length} services, ${clients.length} clients, ${expenses.length} expenses.`
+      );
+    } catch {
+      setNote("Could not save the file. Try again, or use a different browser.");
+    }
   };
 
   const exportClients = () => {
@@ -2458,13 +2462,50 @@ const csvCell = (v) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-const download = (name, text) => {
-  const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" });
+const isIOS = () =>
+  typeof navigator !== "undefined" &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
+/* Saves a generated file, working around three real browser quirks:
+
+   - an anchor that is never added to the page is ignored by Safari and Firefox,
+     so it has to be attached before the click and removed after
+   - octet-stream is used instead of the true type, because Safari renders JSON
+     and CSV inline rather than saving them
+   - iOS ignores the download attribute on blob URLs entirely, so the share
+     sheet is the only way to get the file into Files or iCloud there */
+async function saveFile(name, text) {
+  const blob = new Blob([text], { type: "application/octet-stream" });
+
+  if (isIOS()) {
+    try {
+      const file = new File([blob], name, { type: "application/octet-stream" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: name });
+        return "shared";
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return "cancelled";
+      // fall through and try the anchor
+    }
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return "downloaded";
+}
+
+// CSVs keep the byte order mark so Excel opens accented names correctly.
+const download = (name, text) => saveFile(name, "﻿" + text);
 const ymd = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 /* Turn a date input's YYYY-MM-DD into a timestamp. Anchored at midday so a
    timezone shift can never push the entry onto the day before or after, which
