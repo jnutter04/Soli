@@ -2438,14 +2438,18 @@ function DataExport({ settings, clients, products, logs, plan, expenses }) {
         <p className="soli-help">Nothing to download yet. Log a service first.</p>
       ) : (
         <>
-          <button className="soli-cta sm" onClick={exportAll}>Download everything</button>
-          <div className="soli-refactions" style={{ marginTop: 10 }}>
-            <button className="soli-ghost" onClick={exportClients} disabled={clients.length === 0}>Clients (CSV)</button>
-            <button className="soli-ghost" onClick={exportExpenses} disabled={expenses.length === 0}>Expenses (CSV)</button>
+          <div className="soli-refactions">
+            <button className="soli-cta sm" onClick={exportClients} disabled={clients.length === 0}>Clients spreadsheet</button>
+            <button className="soli-ghost" onClick={exportExpenses} disabled={expenses.length === 0}>Expenses spreadsheet</button>
           </div>
+          <p className="soli-help">
+            Spreadsheets open in Excel or Numbers. For your services and totals, use the year-end summary above.
+          </p>
+
+          <button className="soli-ghost" style={{ marginTop: 6 }} onClick={exportAll}>Full backup file</button>
           {note && <p className="soli-help">{note}</p>}
           <p className="soli-help">
-            The full download is a JSON file holding every field Soli stores. Soli cannot read a backup back in yet, so treat it as a copy rather than a restore.
+            The backup is a JSON file: it holds every field Soli stores so nothing is lost, but it is meant for safekeeping rather than reading. Soli cannot load one back in yet, so treat it as a copy rather than a restore.
           </p>
         </>
       )}
