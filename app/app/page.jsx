@@ -1080,10 +1080,10 @@ function WeeklyView({ logs, rent, taxRate }) {
           {weeks.map(w => (
             <div className="soli-weekrow" key={w.ws}>
               <span className="soli-weekname">{weekLabel(w.ws)}<small>{w.count} {w.count === 1 ? "service" : "services"}</small></span>
-              <span>{money2(w.booked)}</span>
-              <span className="soli-weekcost">{money2(w.booth)}</span>
-              <span className="soli-weekkept">{money2(w.kept)}</span>
-              <span>{money2(w.perHour)}</span>
+              <span data-label="Booked">{money2(w.booked)}</span>
+              <span className="soli-weekcost" data-label="Booth">{money2(w.booth)}</span>
+              <span className="soli-weekkept" data-label="Kept">{money2(w.kept)}</span>
+              <span data-label="Per hr">{money2(w.perHour)}</span>
             </div>
           ))}
         </div>
@@ -2908,6 +2908,14 @@ function Styles() {
 .soli-input{width:100%;font-family:inherit;font-size:14.5px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:8px;outline:none;transition:.15s}
 .soli-input:focus{border-color:var(--clay);box-shadow:0 0 0 3px rgba(188,107,76,.12)}
 .soli-input.slim{padding:8px 10px;margin:0;font-size:13.5px}
+/* Grid and flex children default to min-width:auto, which refuses to shrink
+   below their content. Native date and number inputs report a wide intrinsic
+   size, so on a phone they hold their column open and crowd the field beside
+   them. Letting them shrink is what keeps narrow layouts tidy. */
+.soli-row2 > *, .soli-row3 > *, .soli-row4 > *, .soli-exprow > *,
+.soli-invrow > *, .soli-invhead > *, .soli-weekrow > *, .soli-weekhead > *,
+.soli-exprowline > *, .soli-exphead > *, .soli-importrow > *, .soli-bucketrow > * { min-width: 0 }
+.soli-input, .soli-qty, .soli-stockbtn { max-width: 100% }
 .soli-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .soli-row3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
 @media(max-width:540px){.soli-row3{grid-template-columns:1fr}}
@@ -2974,6 +2982,18 @@ function Styles() {
 
 .soli-invtable{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:8px 12px;margin-bottom:20px;overflow-x:auto}
 .soli-invhead,.soli-invrow{display:grid;grid-template-columns:1.6fr .9fr .9fr .8fr 1fr 1.1fr 34px;gap:8px;align-items:center;min-width:640px}
+/* Seven columns cannot work on a phone. Each product becomes a card: name on
+   its own line, then the numbers two-up, with labels so the fields stay clear. */
+@media(max-width:720px){
+  .soli-invtable{overflow-x:visible;padding:8px}
+  .soli-invhead{display:none}
+  .soli-invrow{grid-template-columns:1fr 1fr;min-width:0;gap:8px;padding:14px 4px;border-bottom:1px solid var(--line)}
+  .soli-invrow:last-child{border-bottom:none}
+  .soli-invrow > *:nth-child(1){grid-column:1 / -1}
+  .soli-invrow > .soli-iconbtn{grid-column:1 / -1;justify-content:flex-start;margin-top:2px}
+  .soli-invcell{display:flex;flex-direction:column;gap:4px}
+  .soli-invcell > span{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
+}
 .soli-import{margin-bottom:20px}
 .soli-importtoggle{width:100%;border:1px dashed var(--line);background:var(--surface2);color:var(--clay-d);font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-importtoggle:hover{border-color:var(--clay)}
@@ -3023,6 +3043,17 @@ function Styles() {
 .soli-promo .soli-ghost{width:auto;white-space:nowrap;padding:12px 18px}
 .soli-weektable{overflow-x:auto}
 .soli-weekhead,.soli-weekrow{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr .9fr;gap:8px;align-items:center;min-width:440px}
+/* On a phone the five columns cannot fit without sideways scrolling, which is
+   fiddly to read. Each week becomes a small card instead, with the column name
+   shown beside its figure so nothing loses meaning. */
+@media(max-width:620px){
+  .soli-weektable{overflow-x:visible}
+  .soli-weekhead{display:none}
+  .soli-weekrow{grid-template-columns:1fr 1fr;min-width:0;gap:6px 12px;padding:14px 2px}
+  .soli-weekname{grid-column:1 / -1;margin-bottom:2px}
+  .soli-weekrow > span[data-label]{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px}
+  .soli-weekrow > span[data-label]::before{content:attr(data-label);color:var(--ink2);font-size:11.5px;text-transform:uppercase;letter-spacing:.4px}
+}
 .soli-weekhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
 .soli-weekrow{padding:11px 4px;border-bottom:1px solid var(--line);font-size:14px}
 .soli-weekrow:last-child{border-bottom:none}
