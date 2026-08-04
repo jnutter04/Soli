@@ -2106,11 +2106,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </label>
       </Field>
 
-      <DataExport settings={settings} clients={clients} products={products} logs={logs} plan={plan} expenses={expenses} />
-
       <PushToggle />
-
-      <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
 
       <ReferralPanel />
 
@@ -2134,10 +2130,20 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
 
       <div className="soli-datatools">
         <div className="soli-datahead">Your data</div>
-        <button className="soli-ghost" onClick={onLoad}>Load sample data to explore</button>
-        <button className="soli-del" onClick={onClear}><Trash2 size={15} /> Clear all data</button>
+        <p className="soli-help" style={{ marginTop: 0 }}>
+          Everything Soli holds for you, in one place. It saves to your account, so it follows you to any device you sign in on.
+        </p>
+
+        <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
+
+        <DataExport settings={settings} clients={clients} products={products} logs={logs} plan={plan} expenses={expenses} />
+
+        <div className="soli-subblock">
+          <div className="soli-subhead">Start over</div>
+          <button className="soli-ghost" onClick={onLoad}>Load sample data to explore</button>
+          <button className="soli-del" style={{ marginTop: 10 }} onClick={onClear}><Trash2 size={15} /> Clear all data</button>
+        </div>
       </div>
-      <p className="soli-help">Your data saves to your account, so it follows you to any device you sign in on.</p>
 
       <div className="soli-danger">
         <div className="soli-datahead">Delete your account</div>
@@ -2419,10 +2425,10 @@ function DataExport({ settings, clients, products, logs, plan, expenses }) {
   const nothingYet = logs.length === 0 && clients.length === 0 && expenses.length === 0;
 
   return (
-    <div className="soli-datatools">
-      <div className="soli-datahead">Download your data</div>
+    <div className="soli-subblock">
+      <div className="soli-subhead">Backups</div>
       <p className="soli-help" style={{ marginTop: 0 }}>
-        Your records belong to you. Take a backup whenever you like, or keep a copy somewhere safe before making big changes.
+        Your records belong to you. Take a copy whenever you like, or before making big changes.
       </p>
       {nothingYet ? (
         <p className="soli-help">Nothing to download yet. Log a service first.</p>
@@ -2525,8 +2531,8 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
 
   if (years.length === 0) {
     return (
-      <div className="soli-datatools">
-        <div className="soli-datahead">Tax &amp; exports</div>
+      <div className="soli-subblock">
+        <div className="soli-subhead">Year-end summary</div>
         <p className="soli-help" style={{ marginTop: 0 }}>Log some services and your year-end summary and accountant export will appear here.</p>
       </div>
     );
@@ -2582,8 +2588,8 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
   };
 
   return (
-    <div className="soli-datatools">
-      <div className="soli-datahead">Tax &amp; exports</div>
+    <div className="soli-subblock">
+      <div className="soli-subhead">Year-end summary</div>
       <p className="soli-help" style={{ marginTop: 0 }}>
         A year of your numbers, ready to hand to an accountant. Tips are counted as income here, even though they stay out of the per-service profit comparisons.
       </p>
@@ -3177,6 +3183,11 @@ function Styles() {
 .soli-danger .soli-del:disabled{opacity:.45;cursor:not-allowed}
 [data-theme="dark"] .soli-danger{background:#2e211b;border-color:#5a3a2b}
 .soli-datahead{font-weight:600;font-size:14px;margin-bottom:2px}
+/* Sub-blocks let one section hold several related jobs without each one
+   looking like a separate feature competing for attention. */
+.soli-subblock{padding-top:16px;margin-top:16px;border-top:1px solid var(--line)}
+.soli-subblock:first-of-type{padding-top:4px;margin-top:4px;border-top:none}
+.soli-subhead{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:8px}
 .soli-ghost{width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink2);font-family:inherit;font-size:14px;font-weight:600;padding:12px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-ghost:hover{border-color:var(--clay);color:var(--ink)}
 .soli-datatools .soli-del{width:100%;justify-content:center;padding:12px;margin-top:0}
