@@ -7,6 +7,7 @@ import {
   Calculator, TrendingUp, AlertTriangle, Bell, Trash2, Sun, PiggyBank, Wallet, Banknote, LogOut, Moon, CalendarDays, Share2, Gift, Receipt, MoreHorizontal
 } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
+import PushToggle from "@/components/PushToggle";
 import InstallPrompt from "@/components/InstallPrompt";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
@@ -2104,6 +2105,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
           <span>Email me a short summary of what I kept each week.</span>
         </label>
       </Field>
+
+      <PushToggle />
 
       <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
 

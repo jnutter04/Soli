@@ -61,3 +61,39 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+/* ------------------------------ push ------------------------------------- */
+/* Payloads are sent encrypted from Soli's server. Everything is wrapped so a
+   malformed payload still shows something rather than silently dropping. */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
+
+  const title = data.title || "Soli";
+  const options = {
+    body: data.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: data.tag || "soli-nudge",       // replaces rather than stacks
+    renotify: false,
+    data: { url: data.url || "/app" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/app";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      // Focus an open Soli tab if there is one, rather than piling up new ones.
+      for (const c of list) {
+        if (c.url.includes(self.location.origin) && "focus" in c) {
+          c.navigate(target);
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});
