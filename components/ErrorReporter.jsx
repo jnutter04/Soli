@@ -2,8 +2,39 @@
 
 import React from "react";
 
+/* Noise from code that is not ours. In-app browsers (Instagram, Facebook) and
+   extensions inject scripts into the page, and when those throw, the error
+   surfaces as if it came from Soli. Alerting on them trains you to ignore
+   alerts, which is worse than having none. */
+const THIRD_PARTY_PATTERNS = [
+  "webkit.messageHandlers",   // iOS in-app browser and extension bridges
+  "gCrWeb",                   // Chrome on iOS
+  "_AutofillCallbackHandler", // iOS autofill injection
+  "chrome-extension://",
+  "moz-extension://",
+  "safari-extension://",
+  "safari-web-extension://",
+  "Script error",             // opaque cross-origin failure, no detail to act on
+  "ResizeObserver loop",      // benign browser timing noise
+];
+
+function isOurs(text, filename) {
+  const blob = `${text || ""} ${filename || ""}`;
+  if (THIRD_PARTY_PATTERNS.some((p) => blob.includes(p))) return false;
+  // A filename from another origin means another script threw, not ours.
+  if (filename && !filename.startsWith(location.origin) && !filename.startsWith("/")) return false;
+  return true;
+}
+
+// One report per distinct problem per page load, so a loop cannot flood the inbox.
+const seen = new Set();
+
 function report(payload) {
   try {
+    const key = (payload.message || "").slice(0, 120);
+    if (seen.has(key)) return;
+    seen.add(key);
+
     const body = JSON.stringify(payload);
     // sendBeacon survives page teardown; fetch is the fallback.
     if (navigator.sendBeacon) {
@@ -37,21 +68,17 @@ export default class ErrorReporter extends React.Component {
 
   componentDidMount() {
     this.onError = (event) => {
-      report({
-        source: "window",
-        message: event?.message || "Uncaught error",
-        stack: event?.error?.stack || `${event?.filename || ""}:${event?.lineno || ""}`,
-        url: location.href,
-      });
+      const message = event?.message || "Uncaught error";
+      const stack = event?.error?.stack || `${event?.filename || ""}:${event?.lineno || ""}`;
+      if (!isOurs(`${message} ${stack}`, event?.filename)) return;
+      report({ source: "window", message, stack, url: location.href });
     };
     this.onRejection = (event) => {
       const r = event?.reason;
-      report({
-        source: "window",
-        message: "Unhandled promise rejection: " + (r?.message || String(r)).slice(0, 200),
-        stack: r?.stack || "",
-        url: location.href,
-      });
+      const message = "Unhandled promise rejection: " + (r?.message || String(r)).slice(0, 200);
+      const stack = r?.stack || "";
+      if (!isOurs(`${message} ${stack}`)) return;
+      report({ source: "window", message, stack, url: location.href });
     };
     window.addEventListener("error", this.onError);
     window.addEventListener("unhandledrejection", this.onRejection);
