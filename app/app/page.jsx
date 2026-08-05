@@ -1775,6 +1775,27 @@ function ClientsView({ clients, logs, saveClients, rent }) {
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", notes: "", rebookWeeks: 4 });
+  const [query, setQuery] = useState("");
+
+  /* Search only appears once the list is long enough to be worth scrolling.
+     Below that it would be one more thing on screen solving a problem nobody
+     has yet. */
+  const searchable = clients.length >= 8;
+  const q = query.trim().toLowerCase();
+  const searching = searchable && q.length > 0;
+
+  /* Matches on name, phone or notes, so someone can be found by the digits
+     they remember or by a note like "prefers Saturdays". Digits are compared
+     with punctuation stripped, since nobody types a number the same way twice. */
+  const matches = (c) => {
+    if (!q) return true;
+    const digits = q.replace(/\D/g, "");
+    return (
+      String(c.name || "").toLowerCase().includes(q) ||
+      String(c.notes || "").toLowerCase().includes(q) ||
+      (digits.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(digits))
+    );
+  };
   const stats = (cid) => {
     const ls = logs.filter(l => l.clientId === cid);
     const profit = ls.reduce((s, l) => s + profitOf(l, rent).profit, 0);
@@ -1829,10 +1850,30 @@ function ClientsView({ clients, logs, saveClients, rent }) {
   return (
     <div className="soli-page">
       <h1 className="soli-h1">Clients</h1>
-      <p className="soli-sub">{clients.length} clients · ranked by lifetime profit</p>
+      <p className="soli-sub">
+        {searching
+          ? `${clients.filter(matches).length} of ${clients.length} clients`
+          : `${clients.length} clients · ranked by lifetime profit`}
+      </p>
+
+      {searchable && (
+        <div className="soli-search">
+          <input
+            className="soli-input"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, phone or note"
+            aria-label="Search clients"
+          />
+          {query && (
+            <button className="soli-searchclear" onClick={() => setQuery("")} aria-label="Clear search">&times;</button>
+          )}
+        </div>
+      )}
       {clients.length === 0 && <p className="soli-emptyhint" style={{ textAlign: "left", marginTop: 0 }}>No clients yet. They're added automatically when you log a service. Just type a new name on the <b>Log service</b> screen.</p>}
 
-      {slipping.length > 0 && (
+      {!searching && slipping.length > 0 && (
         <section className="soli-block soli-watch">
           <div className="soli-blockhead"><AlertTriangle size={18} strokeWidth={1.9} /><h2>Slipping away</h2></div>
           <p className="soli-note">
@@ -1857,8 +1898,14 @@ function ClientsView({ clients, logs, saveClients, rent }) {
         </section>
       )}
 
+      {searching && clients.filter(matches).length === 0 && (
+        <p className="soli-emptyhint" style={{ textAlign: "left" }}>
+          Nobody matches &ldquo;{query}&rdquo;. Try part of a name, or the last few digits of a phone number.
+        </p>
+      )}
+
       <div className="soli-clientlist">
-        {clients.map(c => ({ ...c, s: stats(c.id) })).sort((a, b) => b.s.profit - a.s.profit).map(c => (
+        {clients.filter(matches).map(c => ({ ...c, s: stats(c.id) })).sort((a, b) => b.s.profit - a.s.profit).map(c => (
           <div key={c.id} className="soli-clientcard" onClick={() => setOpen(open === c.id ? null : c.id)}>
             <div className="soli-clienttop">
               <div><div className="soli-clientname">{c.name}</div><div className="soli-clientmeta">
@@ -3015,6 +3062,11 @@ function Styles() {
 .soli-flipresult{font-size:14.5px;line-height:1.5}
 .soli-flipresult b{font-family:'Fraunces',serif;font-size:18px;color:var(--clay-d)}
 
+.soli-search{position:relative;margin-bottom:16px}
+.soli-search .soli-input{margin:0;padding-right:38px}
+.soli-search input[type=search]::-webkit-search-cancel-button{display:none}
+.soli-searchclear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:22px;line-height:1;color:var(--ink2);padding:4px 8px}
+.soli-searchclear:hover{color:var(--ink)}
 .soli-clientlist{display:flex;flex-direction:column;gap:11px}
 .soli-clientcard{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:16px 18px;cursor:pointer;transition:.15s}
 .soli-clientcard:hover{border-color:var(--clay)}
