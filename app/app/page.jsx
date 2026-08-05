@@ -2105,6 +2105,27 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
     const res = await onDeleteAccount();
     if (!res?.ok) { setDelErr(res?.error || "Could not delete the account."); setDelBusy(false); }
   };
+  /* Switching currency only changes the symbol. Converting past work would need
+     a live exchange rate, and would misstate history anyway: a service charged
+     at 120 dollars was 120 dollars, not whatever that is worth today. Anyone
+     with figures already recorded is told plainly before the labels change. */
+  const changeCurrency = (code) => {
+    const from = settings.currency || "USD";
+    if (code === from) return;
+    const recorded = (logs?.length || 0) + (expenses?.length || 0);
+    if (recorded > 0) {
+      const fromSym = curSymbol(from), toSym = curSymbol(code);
+      const ok = confirm(
+        `Show every figure in ${toSym} instead of ${fromSym}?\n\n` +
+        `You have ${recorded} recorded ${recorded === 1 ? "entry" : "entries"}. ` +
+        `Soli relabels them, it does not convert them: ${fromSym}100 becomes ${toSym}100, not its exchange value.\n\n` +
+        `Pick the currency you actually charge in. If you have genuinely changed currency mid-year, tell your accountant which figures were recorded in which.`
+      );
+      if (!ok) return;
+    }
+    saveSettings({ ...settings, currency: code });
+  };
+
   const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
   const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
   const [pcode, setPcode] = useState(""); const [predeeming, setPredeeming] = useState(false); const [perr, setPerr] = useState("");
@@ -2160,10 +2181,15 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
       </Field>
       <Field label="Currency">
         <select className="soli-input" value={settings.currency || "USD"}
-          onChange={e => saveSettings({ ...settings, currency: e.target.value })}>
+          onChange={e => changeCurrency(e.target.value)}>
           {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
         </select>
-        <p className="soli-help">The symbol shown on every figure in Soli. Your Soli subscription is billed separately by Stripe in USD.</p>
+        <p className="soli-help">
+          Changes the symbol on every figure. Soli does not convert: amounts stay
+          the numbers you typed, so this is for picking the currency you work in
+          rather than moving money between currencies. Your Soli subscription is
+          billed separately by Stripe in USD.
+        </p>
       </Field>
       <Field label="Booth rent">
         <div className="soli-seg">
@@ -2817,7 +2843,8 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
   const exportSummary = () => {
     const out = [
       ["Soli year-end summary", String(year)],
-      ["Currency", cur],
+      ["Currency shown", cur],
+      ["Note", "Amounts are the figures entered at the time. Soli does not convert between currencies, so if the currency setting was changed part way through a year, check which entries were recorded in which."],
       ["Generated", ymd(new Date().toISOString())],
       [],
       ["INCOME"],
