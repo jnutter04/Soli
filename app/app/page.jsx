@@ -10,6 +10,7 @@ import ShareCard from "@/components/ShareCard";
 import CsvImport from "@/components/CsvImport";
 import PushToggle from "@/components/PushToggle";
 import InstallPrompt from "@/components/InstallPrompt";
+import { DialogProvider, useDialog } from "@/components/Dialog";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -205,8 +206,15 @@ const perUnitCost = (p) => (p && Number(p.amount) > 0 ? p.cost / p.amount : (p ?
 
 
 /* ================================ APP ==================================== */
+/* The provider sits outside the app itself, because the app's own billing
+   errors need it too. */
 export default function Soli() {
+  return <DialogProvider><SoliApp /></DialogProvider>;
+}
+
+function SoliApp() {
   const router = useRouter();
+  const { tell } = useDialog();
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -343,8 +351,21 @@ export default function Soli() {
       });
       const data = await res.json();
       if (data.url) { window.location.href = data.url; return; }
-      alert(data.error || "Could not start checkout.");
-    } catch { alert("Could not start checkout."); }
+      /* Payment trouble is exactly where a raw browser popup does most damage:
+         it is the moment someone is deciding whether to trust Soli with a card,
+         and in an in-app browser it looks like the scam it is not. */
+      await tell({
+        title: "Could not start checkout",
+        body: data.error || "Something went wrong on the way to the payment page.",
+        detail: "Nothing has been charged. Try again in a moment.",
+      });
+    } catch {
+      await tell({
+        title: "Could not start checkout",
+        body: "Soli could not reach the payment page. Check your connection and try again.",
+        detail: "Nothing has been charged.",
+      });
+    }
     setBillingBusy(false);
   };
   const goPortal = async () => {
@@ -353,8 +374,18 @@ export default function Soli() {
       const res = await fetch("/api/portal", { method: "POST" });
       const data = await res.json();
       if (data.url) { window.location.href = data.url; return; }
-      alert(data.error || "Could not open billing.");
-    } catch { alert("Could not open billing."); }
+      await tell({
+        title: "Could not open billing",
+        body: data.error || "Soli could not open your billing settings just now.",
+        detail: "Your subscription is unchanged.",
+      });
+    } catch {
+      await tell({
+        title: "Could not open billing",
+        body: "Soli could not reach the billing page. Check your connection and try again.",
+        detail: "Your subscription is unchanged.",
+      });
+    }
     setBillingBusy(false);
   };
   const redeemCode = async (code) => {
@@ -1873,6 +1904,7 @@ function riskFor(clientLogs) {
 }
 
 function ClientsView({ clients, logs, saveClients, saveLogs, rent }) {
+  const { ask } = useDialog();
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", notes: "", rebookWeeks: 4 });
@@ -1908,13 +1940,22 @@ function ClientsView({ clients, logs, saveClients, saveLogs, rent }) {
      was earned and has to stay in your totals and your tax figures. What it does
      mean is those services are no longer attached to anyone, so the choice is
      spelled out with the real numbers rather than a bare "are you sure". */
-  const remove = (id) => {
+  const remove = async (id) => {
     const c = clients.find((x) => x.id === id);
     const s = stats(id);
-    const detail = s.services > 0
-      ? `\n\n${c?.name || "This client"} has ${s.services} logged ${s.services === 1 ? "service" : "services"} worth ${money2(s.profit)} in profit.\n\nThose stay in your totals and tax figures, but they will no longer be linked to anyone, and their visit history cannot be recovered.`
-      : "";
-    if (!confirm(`Remove ${c?.name || "this client"}?${detail}`)) return;
+    const has = s.services > 0;
+    const ok = await ask({
+      title: `Remove ${c?.name || "this client"}?`,
+      body: has
+        ? `${c?.name || "This client"} has ${s.services} logged ${s.services === 1 ? "service" : "services"} worth ${money2(s.profit)} in profit.`
+        : undefined,
+      detail: has
+        ? "Those stay in your totals and tax figures, but they will no longer be linked to anyone, and their visit history cannot be recovered."
+        : undefined,
+      confirmLabel: "Remove client",
+      destructive: true,
+    });
+    if (!ok) return;
     /* Write the name onto their services before the client record goes. The
        services have to stay, since the money is real and belongs in the totals
        and tax figures, and without the name they would read as belonging to
@@ -2070,6 +2111,7 @@ function ClientsView({ clients, logs, saveClients, saveLogs, rent }) {
 
 /* ------------------------------ INVENTORY -------------------------------- */
 function Inventory({ products, saveProducts, specialty, logs = [] }) {
+  const { ask } = useDialog();
   const [name, setName] = useState(""); const [cost, setCost] = useState("");
   const [amount, setAmount] = useState(""); const [unit, setUnit] = useState("use");
   const [prodSpec, setProdSpec] = useState(specialty || "");
@@ -2097,14 +2139,19 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
      never rewrites history or moves any money. What does go is the stock count
      and the record of what this product cost, so that is what the warning
      names rather than a bare "are you sure". */
-  const del = (id) => {
+  const del = async (id) => {
     const p = products.find((x) => x.id === id);
     const usedIn = (logs || []).filter((l) => l.qty && l.qty[id]).length;
     const bits = [];
     if (usedIn > 0) bits.push(`${usedIn} logged ${usedIn === 1 ? "service uses" : "services use"} it. Their product cost stays exactly as it is.`);
     if (stockFor(p, logs)) bits.push("Its stock count will be forgotten.");
-    const detail = bits.length ? `\n\n${bits.join("\n")}` : "";
-    if (!confirm(`Remove ${p?.name || "this product"}?${detail}`)) return;
+    const ok = await ask({
+      title: `Remove ${p?.name || "this product"}?`,
+      body: bits.length ? bits.join(" ") : undefined,
+      confirmLabel: "Remove product",
+      destructive: true,
+    });
+    if (!ok) return;
     saveProducts(products.filter((x) => x.id !== id));
   };
   const loadStarters = () => {
@@ -2195,6 +2242,7 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
 
 /* ------------------------------- SETTINGS -------------------------------- */
 function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount, onImportServices }) {
+  const { ask } = useDialog();
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState("");
   const [delBusy, setDelBusy] = useState(false);
@@ -2210,25 +2258,43 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
      a live exchange rate, and would misstate history anyway: a service charged
      at 120 dollars was 120 dollars, not whatever that is worth today. Anyone
      with figures already recorded is told plainly before the labels change. */
-  const changeCurrency = (code) => {
+  const changeCurrency = async (code) => {
     const from = settings.currency || "USD";
     if (code === from) return;
     const recorded = (logs?.length || 0) + (expenses?.length || 0);
     if (recorded > 0) {
       const fromSym = curSymbol(from), toSym = curSymbol(code);
-      const ok = confirm(
-        `Show every figure in ${toSym} instead of ${fromSym}?\n\n` +
-        `You have ${recorded} recorded ${recorded === 1 ? "entry" : "entries"}. ` +
-        `Soli relabels them, it does not convert them: ${fromSym}100 becomes ${toSym}100, not its exchange value.\n\n` +
-        `Pick the currency you actually charge in. If you have genuinely changed currency mid-year, tell your accountant which figures were recorded in which.`
-      );
+      const ok = await ask({
+        title: `Show every figure in ${toSym} instead of ${fromSym}?`,
+        body: `You have ${recorded} recorded ${recorded === 1 ? "entry" : "entries"}. Soli relabels them, it does not convert them: ${fromSym}100 becomes ${toSym}100, not its exchange value.`,
+        detail: "Pick the currency you actually charge in. If you have genuinely changed currency mid-year, tell your accountant which figures were recorded in which.",
+        confirmLabel: `Use ${toSym}`,
+      });
       if (!ok) return;
     }
     saveSettings({ ...settings, currency: code });
   };
 
-  const onLoad = () => { if (confirm("Load sample data? This replaces what's here now with an example set you can explore. Clear it anytime.")) loadSample(); };
-  const onClear = () => { if (confirm("Clear all data? This permanently erases your clients, products and logged services. This can't be undone.")) clearAll(); };
+  const onLoad = async () => {
+    const ok = await ask({
+      title: "Load sample data?",
+      body: "This replaces what's here now with an example set you can explore.",
+      detail: "You can clear it again at any time.",
+      confirmLabel: "Load sample data",
+      destructive: true,
+    });
+    if (ok) loadSample();
+  };
+  const onClear = async () => {
+    const ok = await ask({
+      title: "Clear all data?",
+      body: "This permanently erases your clients, products and logged services.",
+      detail: "This cannot be undone. If you want a copy first, close this and use Download everything.",
+      confirmLabel: "Erase everything",
+      destructive: true,
+    });
+    if (ok) clearAll();
+  };
   const [pcode, setPcode] = useState(""); const [predeeming, setPredeeming] = useState(false); const [perr, setPerr] = useState("");
   const doRedeem = async () => { setPerr(""); setPredeeming(true); const r = await onRedeem(pcode.trim()); if (!r.ok) setPerr(r.error); setPredeeming(false); };
   const bUnit = settings.boothRentUnit || "hour";
@@ -2420,6 +2486,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
 /* Lets a logged service be corrected or removed. Without this a typo stays in
    the numbers permanently, and the only escape is wiping all data. */
 function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
+  const { ask } = useDialog();
   const [open, setOpen] = useState(null);
   const [form, setForm] = useState({});
   const [showAll, setShowAll] = useState(false);
@@ -2501,11 +2568,17 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
     });
     setOpen(null);
   };
-  const remove = (l) => {
-    if (confirm(`Delete "${l.service}" for ${nameOf(l.clientId, l)}? This cannot be undone.`)) {
-      deleteLog(l.id);
-      setOpen(null);
-    }
+  const remove = async (l) => {
+    const ok = await ask({
+      title: `Delete "${l.service}"?`,
+      body: `Logged for ${nameOf(l.clientId, l)}.`,
+      detail: "This cannot be undone, and every total that included it will change.",
+      confirmLabel: "Delete service",
+      destructive: true,
+    });
+    if (!ok) return;
+    deleteLog(l.id);
+    setOpen(null);
   };
 
   return (
@@ -3477,6 +3550,19 @@ function Styles() {
 .soli-sheethead h2{font-family:var(--font-fraunces),serif;font-size:20px;font-weight:600;margin:0}
 .soli-sheetx{background:none;border:none;cursor:pointer;font-size:26px;line-height:1;color:var(--ink2);padding:0 4px}
 .soli-sheetx:hover{color:var(--ink)}
+/* Confirm and notice dialogs. Narrower than a full sheet, since they carry a
+   sentence and two buttons rather than a form. */
+.soli-dialog{max-width:360px}
+.soli-dialog h2{font-family:var(--font-fraunces),serif;font-size:19px;font-weight:600;margin:0;line-height:1.25}
+.soli-dialog-body{font-size:14px;color:var(--ink2);line-height:1.5;margin:10px 0 0}
+.soli-dialog-detail{font-size:12.5px;color:var(--ink2);line-height:1.45;margin:8px 0 0;opacity:.85}
+.soli-dialog-actions{display:flex;gap:10px;margin-top:18px}
+.soli-dialog-actions .soli-cta,.soli-dialog-actions .soli-ghost{width:auto;flex:1;margin:0;padding:12px}
+/* Destructive confirmations wear the warning colour rather than the brand's
+   inviting clay, so the button that erases work does not look like the one
+   that saves it. */
+.soli-cta.danger{background:#A4583B}
+.soli-cta.danger:hover{background:#8F4B31}
 .soli-sharepreview{display:block;width:100%;max-width:230px;margin:14px auto 0;border-radius:12px;border:1px solid var(--line)}
 .soli-toggle{display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink2);line-height:1.45}
 .soli-toggle input{width:18px;height:18px;flex:none;margin-top:1px;accent-color:var(--clay);cursor:pointer}
