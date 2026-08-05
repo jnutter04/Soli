@@ -366,7 +366,17 @@ export default function Soli() {
     } catch { return { ok: false, error: "Something went wrong. Try again." }; }
   };
 
-  const saveLogs = (v) => { setLogs(v); if (userId) saveField(supabase, userId, "logs", v); };
+  /* Show the change straight away, then let the save settle it. If another
+     device wrote at the same time the server merges both and hands back the
+     reconciled list, so their work appears here instead of being lost. */
+  const persist = (field, value, setter) => {
+    setter(value);
+    if (!userId) return;
+    saveField(supabase, userId, field, value).then((res) => {
+      if (res?.ok && res.value !== value) setter(res.value);
+    });
+  };
+  const saveLogs = (v) => persist("logs", v, setLogs);
 
   /* Writes imported services in, matching clients by name so a history import
      lands against the people already in the account instead of duplicating
@@ -431,11 +441,11 @@ export default function Soli() {
   // figure, including the tax export, so logged services must be fixable.
   const updateLog = (id, patch) => saveLogs(logs.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const deleteLog = (id) => saveLogs(logs.filter((l) => l.id !== id));
-  const saveClients = (v) => { setClients(v); if (userId) saveField(supabase, userId, "clients", v); };
-  const saveProducts = (v) => { setProducts(v); if (userId) saveField(supabase, userId, "products", v); };
-  const saveSettings = (v) => { setSettings(v); if (userId) saveField(supabase, userId, "settings", v); };
-  const savePlan = (v) => { setPlan(v); if (userId) saveField(supabase, userId, "plan", v); };
-  const saveExpenses = (v) => { setExpenses(v); if (userId) saveField(supabase, userId, "expenses", v); };
+  const saveClients = (v) => persist("clients", v, setClients);
+  const saveProducts = (v) => persist("products", v, setProducts);
+  const saveSettings = (v) => persist("settings", v, setSettings);
+  const savePlan = (v) => persist("plan", v, setPlan);
+  const saveExpenses = (v) => persist("expenses", v, setExpenses);
 
   // Service templates live inside the settings blob (no schema change needed).
   const templates = settings.templates || [];
