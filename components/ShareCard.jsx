@@ -38,6 +38,19 @@ export function drawShareCard(canvas, { amount, label, period, showAmount, statL
   const ctx = canvas.getContext("2d");
   canvas.width = W; canvas.height = H;
 
+  /* The fonts are self-hosted under a generated family name, and a canvas
+     cannot read a CSS variable, so the real names are resolved off the document
+     here. Naming them literally would quietly fall back to a system face on the
+     one image people actually post in public. */
+  const stack = (varName, fallback) => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      return v ? `${v}, ${fallback}` : fallback;
+    } catch { return fallback; }
+  };
+  const SERIF = stack("--font-fraunces", "Georgia, serif");
+  const SANS = stack("--font-hanken", "system-ui, sans-serif");
+
   // Warm oat background with the brand's soft glows.
   ctx.fillStyle = "#F6EFE4"; ctx.fillRect(0, 0, W, H);
   let g = ctx.createRadialGradient(W * 0.15, 0, 0, W * 0.15, 0, W * 1.1);
@@ -50,7 +63,7 @@ export function drawShareCard(canvas, { amount, label, period, showAmount, statL
   // Brand lockup
   sunMark(ctx, 150, 210, 26, "#BC6B4C");
   ctx.fillStyle = "#2B2118";
-  ctx.font = "600 76px Fraunces, Georgia, serif";
+  ctx.font = `600 76px ${SERIF}`;
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillText("Soli", 218, 214);
 
@@ -71,44 +84,44 @@ export function drawShareCard(canvas, { amount, label, period, showAmount, statL
 
   ctx.textAlign = "center";
   ctx.fillStyle = "#D6DBC2";
-  ctx.font = "500 34px 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.font = `500 34px ${SANS}`;
   ctx.fillText(label, W / 2, by + 78);
 
   ctx.fillStyle = "#F4F0E4";
   if (showAmount) {
-    ctx.font = "600 148px Fraunces, Georgia, serif";
+    ctx.font = `600 148px ${SERIF}`;
     ctx.fillText(amount, W / 2, by + 210);
   } else {
-    ctx.font = "600 104px Fraunces, Georgia, serif";
+    ctx.font = `600 104px ${SERIF}`;
     ctx.fillText("My best month yet", W / 2, by + 190, bw - 60);
   }
 
   ctx.fillStyle = "rgba(244,240,228,0.78)";
-  ctx.font = "400 30px 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.font = `400 30px ${SANS}`;
   ctx.fillText(period, W / 2, by + 330);
 
   // Two supporting stats
   const sy = by + bh + 110;
   ctx.fillStyle = "#6E5E4C";
-  ctx.font = "500 30px 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.font = `500 30px ${SANS}`;
   ctx.fillText(statLeft.label, cx + cw * 0.28, sy);
   ctx.fillText(statRight.label, cx + cw * 0.72, sy);
   ctx.fillStyle = "#2B2118";
-  ctx.font = "600 62px Fraunces, Georgia, serif";
+  ctx.font = `600 62px ${SERIF}`;
   ctx.fillText(statLeft.value, cx + cw * 0.28, sy + 78);
   ctx.fillText(statRight.value, cx + cw * 0.72, sy + 78);
 
   // Honest framing so the number is not mistaken for revenue
   ctx.fillStyle = "#9c8a72";
-  ctx.font = "400 26px 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.font = `400 26px ${SANS}`;
   ctx.fillText("after product, booth rent & taxes", W / 2, cy + ch - 54);
 
   // Footer
   ctx.fillStyle = "#A4583B";
-  ctx.font = "600 46px Fraunces, Georgia, serif";
+  ctx.font = `600 46px ${SERIF}`;
   ctx.fillText("soli.beauty", W / 2, H - 210);
   ctx.fillStyle = "#6E5E4C";
-  ctx.font = "400 30px 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.font = `400 30px ${SANS}`;
   ctx.fillText("Know what you actually keep", W / 2, H - 150);
 }
 

@@ -167,16 +167,15 @@ export default function LoginPage() {
 function LoginStyles() {
   return (
     <style>{`
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
 .lg-root{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
-  font-family:'Hanken Grotesk',system-ui,sans-serif;color:#2B2118;background:#F6EFE4;
+  font-family:var(--font-hanken),system-ui,sans-serif;color:#2B2118;background:#F6EFE4;
   background-image:radial-gradient(circle at 15% 0%,rgba(201,162,75,.14),transparent 42%),radial-gradient(circle at 88% 6%,rgba(188,107,76,.10),transparent 40%)}
 .lg-root *{box-sizing:border-box}
 .lg-card{width:100%;max-width:400px;background:#FFFDF9;border:1px solid #E7DBC8;border-radius:22px;padding:34px 30px;box-shadow:0 24px 60px -28px rgba(43,33,24,.3)}
 .lg-brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
 .lg-logomark{width:36px;height:36px;border-radius:50%;background:#BC6B4C;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(188,107,76,.35)}
-.lg-word{font-family:'Fraunces',serif;font-weight:600;font-size:26px;letter-spacing:-.5px}
-.lg-h1{font-family:'Fraunces',serif;font-weight:600;font-size:27px;margin:0 0 4px;letter-spacing:-.5px}
+.lg-word{font-family:var(--font-fraunces),serif;font-weight:600;font-size:26px;letter-spacing:-.5px}
+.lg-h1{font-family:var(--font-fraunces),serif;font-weight:600;font-size:27px;margin:0 0 4px;letter-spacing:-.5px}
 .lg-sub{color:#6E5E4C;font-size:14.5px;margin:0 0 22px}
 .lg-label{display:block;font-size:13px;font-weight:600;margin:0 0 7px}
 .lg-input{width:100%;font-family:inherit;font-size:15px;color:#2B2118;background:#FFFDF9;border:1px solid #E7DBC8;border-radius:11px;padding:12px 13px;margin-bottom:16px;outline:none;transition:.15s}

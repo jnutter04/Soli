@@ -588,7 +588,7 @@ export default function Soli() {
     <div className="soli-root soli-center"><Styles />
       <div style={{ maxWidth: 460, textAlign: "center", padding: 24 }}>
         <div className="soli-loadmark" style={{ margin: "0 auto 16px", animation: "none", background: "var(--clay-d)" }}><AlertTriangle size={24} /></div>
-        <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22, margin: "0 0 8px" }}>We couldn't load your data</h2>
+        <h2 style={{ fontFamily: "var(--font-fraunces),serif", fontSize: 22, margin: "0 0 8px" }}>We couldn't load your data</h2>
         <p style={{ color: "var(--ink2)", fontSize: 14, margin: "0 0 16px" }}>{loadError}</p>
         <button className="soli-cta" style={{ maxWidth: 260, margin: "0 auto" }} onClick={() => location.reload()}>Try again</button>
         <button className="soli-navbtn soli-signout" style={{ margin: "12px auto 0" }} onClick={signOut}><LogOut size={16} /> Sign out</button>
@@ -3156,10 +3156,9 @@ function Paywall({ email, onSubscribe, onSignOut, busy, onRedeem }) {
 /* -------------------------------- STYLES --------------------------------- */
 function Styles() {
   return (<style>{`
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
 .soli-root{--bg:#F6EFE4;--surface:#FFFDF9;--surface2:#FBF5EB;--ink:#2B2118;--ink2:#6E5E4C;--line:#E7DBC8;
   --clay:#BC6B4C;--clay-d:#A4583B;--sage:#6E7A56;--sage-d:#5A6646;--profit:#5E7142;--cost:#9A6A54;--gold:#C9A24B;
-  font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;line-height:1.45;
+  font-family:var(--font-hanken),system-ui,sans-serif;color:var(--ink);background:var(--bg);min-height:100vh;line-height:1.45;
   background-image:radial-gradient(circle at 12% 0%,rgba(201,162,75,.10),transparent 42%),radial-gradient(circle at 90% 8%,rgba(188,107,76,.08),transparent 40%)}
 *{box-sizing:border-box}
 .soli-center{display:flex;align-items:center;justify-content:center;height:100vh}
@@ -3168,7 +3167,7 @@ function Styles() {
 .soli-header{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:16px 26px;background:rgba(255,253,249,.82);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
 .soli-brand{display:flex;align-items:center;gap:10px}
 .soli-logomark{width:32px;height:32px;border-radius:50%;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(188,107,76,.35)}
-.soli-wordmark{font-family:'Fraunces',serif;font-weight:600;font-size:25px;letter-spacing:-.5px}
+.soli-wordmark{font-family:var(--font-fraunces),serif;font-weight:600;font-size:25px;letter-spacing:-.5px}
 .soli-tag{font-size:11.5px;color:var(--ink2);font-style:italic;border-left:1px solid var(--line);padding-left:10px;margin-left:2px}
 .soli-nav{display:flex;gap:4px;flex-wrap:wrap}
 .soli-navbtn{display:flex;align-items:center;gap:7px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:13.5px;color:var(--ink2);padding:8px 13px;border-radius:9px;transition:.15s}
@@ -3180,7 +3179,7 @@ function Styles() {
 .soli-page{animation:rise .4s ease both}
 .soli-narrow{max-width:560px;margin:0 auto}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.soli-h1{font-family:'Fraunces',serif;font-weight:600;font-size:34px;margin:0 0 4px;letter-spacing:-.6px}
+.soli-h1{font-family:var(--font-fraunces),serif;font-weight:600;font-size:34px;margin:0 0 4px;letter-spacing:-.6px}
 .soli-sub{color:var(--ink2);margin:0 0 24px;font-size:14.5px}
 .soli-dashhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
 .soli-rangeseg{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:3px}
@@ -3199,38 +3198,38 @@ function Styles() {
 @media(max-width:560px){.soli-hero{grid-template-columns:1fr}.soli-tag{display:none}}
 .soli-heroblock{background:linear-gradient(150deg,#5E7142,#475431);color:#F4F0E4;border-radius:18px;padding:20px 22px;display:flex;flex-direction:column}
 .soli-herolabel{font-size:12.5px;display:flex;align-items:center;gap:6px;color:#D6DBC2;margin-bottom:8px}
-.soli-heroval{font-family:'Fraunces',serif;font-size:34px;font-weight:600;line-height:1}
+.soli-heroval{font-family:var(--font-fraunces),serif;font-size:34px;font-weight:600;line-height:1}
 .soli-herosub{font-size:11.5px;opacity:.8;margin-top:6px}
 .soli-herodelta{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;margin-top:9px;padding:3px 10px;border-radius:20px;width:fit-content;background:rgba(255,255,255,.15)}
 .soli-herodelta.up{color:#cfe6ae}
 .soli-herodelta.down{color:#f2bda5}
 .soli-herojar{background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:18px;padding:20px 22px;display:flex;flex-direction:column}
 .soli-jarlabel{font-size:12.5px;display:flex;align-items:center;gap:6px;opacity:.92;margin-bottom:8px}
-.soli-jarval{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1}
+.soli-jarval{font-family:var(--font-fraunces),serif;font-size:30px;font-weight:600;line-height:1}
 
 .soli-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:30px}
 @media(max-width:680px){.soli-cards{grid-template-columns:repeat(2,1fr)}}
 .soli-stat{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:15px 16px}
 .soli-statlabel{font-size:11.5px;color:var(--ink2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
-.soli-statval{font-family:'Fraunces',serif;font-size:21px;font-weight:600}
+.soli-statval{font-family:var(--font-fraunces),serif;font-size:21px;font-weight:600}
 .soli-stat.profit .soli-statval{color:var(--profit)}
 .soli-stat.cost .soli-statval{color:var(--cost)}
 
 .soli-block{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 24px;margin-bottom:18px}
 .soli-blockhead{display:flex;align-items:center;gap:9px;color:var(--clay-d)}
-.soli-blockhead h2{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin:0;color:var(--ink)}
+.soli-blockhead h2{font-family:var(--font-fraunces),serif;font-size:18px;font-weight:600;margin:0;color:var(--ink)}
 .soli-note{font-size:13px;color:var(--ink2);margin:8px 0 16px}
 
 .soli-srcgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 @media(max-width:560px){.soli-srcgrid{grid-template-columns:repeat(2,1fr)}}
 .soli-srccell{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px 13px;display:flex;flex-direction:column;gap:4px}
 .soli-srclabel{font-size:11.5px;color:var(--ink2)}
-.soli-srcval{font-family:'Fraunces',serif;font-size:18px;font-weight:600}
+.soli-srcval{font-family:var(--font-fraunces),serif;font-size:18px;font-weight:600}
 .soli-srcnote{margin-top:13px;font-size:12.5px;color:var(--clay-d);background:#F6E5DA;border-radius:10px;padding:10px 13px}
 
 .soli-bars{display:flex;flex-direction:column;gap:15px}
 .soli-barlabel{display:flex;justify-content:space-between;font-size:14px;font-weight:500;margin-bottom:6px}
-.soli-barval{font-family:'Fraunces',serif;color:var(--sage-d);font-weight:600}
+.soli-barval{font-family:var(--font-fraunces),serif;color:var(--sage-d);font-weight:600}
 .soli-bartrack{height:9px;background:var(--surface2);border-radius:6px;overflow:hidden}
 .soli-barfill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--sage),var(--sage-d));transition:width .7s cubic-bezier(.2,.8,.2,1)}
 .soli-barmeta{font-size:12px;color:var(--ink2);margin-top:5px}
@@ -3238,7 +3237,7 @@ function Styles() {
 .soli-watch{background:linear-gradient(160deg,#FBEFE6,#F8E7DB);border-color:#EBD3C2}
 .soli-watchrow{display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #EDD8C8;font-size:14px}
 .soli-watchrow:first-of-type{border-top:none}
-.soli-watchval{font-family:'Fraunces',serif;font-weight:600;color:var(--clay-d)}
+.soli-watchval{font-family:var(--font-fraunces),serif;font-weight:600;color:var(--clay-d)}
 
 .soli-duerow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .soli-duerow:first-of-type{border-top:none}
@@ -3294,23 +3293,23 @@ function Styles() {
 .soli-preview.bad{background:#F6E0D5;border-color:#E8C4B0}
 .soli-prevrow{display:flex;justify-content:space-between;font-size:13.5px;color:var(--ink2);padding:3px 0}
 .soli-prevrow.tax{color:var(--clay-d)}
-.soli-prevrow.main{font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--ink);border-top:1px solid rgba(0,0,0,.08);margin-top:6px;padding-top:9px}
+.soli-prevrow.main{font-family:var(--font-fraunces),serif;font-size:19px;font-weight:600;color:var(--ink);border-top:1px solid rgba(0,0,0,.08);margin-top:6px;padding-top:9px}
 .soli-prevrow.main span:last-child{color:var(--profit)}
 .soli-prevrow.sub{font-size:12px;justify-content:flex-end;padding-top:2px}
 
 .soli-plancard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:6px 0 16px}
 .soli-planrow{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--ink2);padding:5px 0}
-.soli-planrow b{font-family:'Fraunces',serif;color:var(--ink);font-size:16px}
+.soli-planrow b{font-family:var(--font-fraunces),serif;color:var(--ink);font-size:16px}
 .soli-planrow.sub{font-size:12.5px}
 .soli-planrow.main{border-top:1px solid var(--line);margin-top:7px;padding-top:11px;font-size:15px;color:var(--ink)}
 .soli-planrow.main b{font-size:21px;color:var(--clay-d)}
 .soli-plangoal{background:linear-gradient(150deg,#EDF0E2,#E3E8D2);border:1px solid #D3DBBC;border-radius:14px;padding:16px 18px;font-size:15px;line-height:1.5}
-.soli-plangoal b{font-family:'Fraunces',serif;color:var(--sage-d)}
+.soli-plangoal b{font-family:var(--font-fraunces),serif;color:var(--sage-d)}
 .soli-plannote{display:block;font-size:11.5px;color:var(--ink2);margin-top:5px}
 .soli-flip{margin-top:18px;background:var(--surface2);border:1px dashed var(--line);border-radius:16px;padding:18px}
-.soli-flriphead{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin-bottom:12px}
+.soli-flriphead{font-family:var(--font-fraunces),serif;font-weight:600;font-size:15px;margin-bottom:12px}
 .soli-flipresult{font-size:14.5px;line-height:1.5}
-.soli-flipresult b{font-family:'Fraunces',serif;font-size:18px;color:var(--clay-d)}
+.soli-flipresult b{font-family:var(--font-fraunces),serif;font-size:18px;color:var(--clay-d)}
 
 .soli-histhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .soli-histcontrols{display:grid;grid-template-columns:1fr 200px;gap:10px;margin:12px 0 4px}
@@ -3326,10 +3325,10 @@ function Styles() {
 .soli-clientcard{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:16px 18px;cursor:pointer;transition:.15s}
 .soli-clientcard:hover{border-color:var(--clay)}
 .soli-clienttop{display:flex;justify-content:space-between;align-items:center}
-.soli-clientname{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-clientname{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600}
 .soli-clientmeta{font-size:12.5px;color:var(--ink2)}
-.soli-clientprofit{font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--profit);text-align:right;display:flex;flex-direction:column}
-.soli-clientprofit small{font-size:10.5px;color:var(--ink2);font-family:'Hanken Grotesk';font-weight:400}
+.soli-clientprofit{font-family:var(--font-fraunces),serif;font-size:19px;font-weight:600;color:var(--profit);text-align:right;display:flex;flex-direction:column}
+.soli-clientprofit small{font-size:10.5px;color:var(--ink2);font-family:var(--font-hanken);font-weight:400}
 .soli-clientdetail{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .soli-clientnotes{font-size:13.5px;color:var(--ink2);margin:0 0 8px}
 .soli-history{display:flex;flex-direction:column;gap:6px;margin:10px 0}
@@ -3420,7 +3419,7 @@ function Styles() {
 .soli-weekname{display:flex;flex-direction:column;font-weight:500}
 .soli-weekname small{font-weight:400;color:var(--ink2);font-size:11.5px}
 .soli-weekcost{color:var(--cost)}
-.soli-weekkept{font-family:'Fraunces',serif;font-weight:600;color:var(--profit)}
+.soli-weekkept{font-family:var(--font-fraunces),serif;font-weight:600;color:var(--profit)}
 .soli-bucketrow{display:grid;grid-template-columns:1fr 92px 34px;gap:8px;align-items:center;margin-bottom:8px}
 .soli-bucketpct{display:flex;align-items:center;gap:5px}
 .soli-bucketpct .soli-input{margin:0}
@@ -3433,12 +3432,12 @@ function Styles() {
 .soli-recentmain{display:flex;flex-direction:column;gap:2px;min-width:0}
 .soli-recentsvc{font-size:14.5px;font-weight:600}
 .soli-recentmeta{font-size:12px;color:var(--ink2)}
-.soli-recentamt{display:flex;flex-direction:column;align-items:flex-end;font-family:'Fraunces',serif;font-size:15px;font-weight:600;white-space:nowrap}
-.soli-recentamt small{font-family:'Hanken Grotesk',sans-serif;font-size:11px;font-weight:400;color:var(--profit)}
+.soli-recentamt{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--font-fraunces),serif;font-size:15px;font-weight:600;white-space:nowrap}
+.soli-recentamt small{font-family:var(--font-hanken),sans-serif;font-size:11px;font-weight:400;color:var(--profit)}
 .soli-recentedit{padding:14px 0}
 .soli-batch{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px}
 .soli-batchhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
-.soli-batchhead b{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-batchhead b{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600}
 .soli-batchrow{display:flex;align-items:flex-start;gap:9px;padding:11px 0;border-top:1px solid var(--line)}
 .soli-batchnum{flex:none;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--line);color:var(--ink2);font-size:11.5px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-top:5px}
 .soli-batchfields{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:7px;min-width:0}
@@ -3454,7 +3453,7 @@ function Styles() {
 .soli-taxgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .soli-taxgrid>div{background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
 .soli-taxgrid span{font-size:11.5px;color:var(--ink2)}
-.soli-taxgrid b{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-taxgrid b{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600}
 .soli-taxgrid b.cost{color:var(--cost)}
 .soli-taxgrid b.profit{color:var(--profit)}
 .soli-reflink{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--ink);word-break:break-all;margin-bottom:10px;font-family:'SFMono-Regular',ui-monospace,Menlo,monospace}
@@ -3468,14 +3467,14 @@ function Styles() {
    and font itself rather than inheriting them. */
 .soli-sheet{--bg:#F6EFE4;--surface:#FFFDF9;--surface2:#FBF5EB;--ink:#2B2118;--ink2:#6E5E4C;--line:#E7DBC8;
   --clay:#BC6B4C;--clay-d:#A4583B;--sage:#6E7A56;--sage-d:#5A6646;--profit:#5E7142;--cost:#9A6A54;--gold:#C9A24B;
-  font-family:'Hanken Grotesk',system-ui,sans-serif;color:var(--ink);line-height:1.45;
+  font-family:var(--font-hanken),system-ui,sans-serif;color:var(--ink);line-height:1.45;
   position:fixed;inset:0;z-index:60;background:rgba(30,22,16,.55);display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
 [data-theme="dark"] .soli-sheet{--bg:#181410;--surface:#241f19;--surface2:#2d2720;--ink:#F2E9DB;--ink2:#b4a68f;--line:#3a332b;
   --clay:#cb7d5b;--clay-d:#e29a75;--sage:#8b996f;--sage-d:#a2b081;--profit:#a4b77f;--cost:#cf9a7d;--gold:#d8b45f}
 .soli-sheet *{box-sizing:border-box}
 .soli-sheetbox{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:22px;max-height:92vh;overflow-y:auto}
 .soli-sheethead{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.soli-sheethead h2{font-family:'Fraunces',serif;font-size:20px;font-weight:600;margin:0}
+.soli-sheethead h2{font-family:var(--font-fraunces),serif;font-size:20px;font-weight:600;margin:0}
 .soli-sheetx{background:none;border:none;cursor:pointer;font-size:26px;line-height:1;color:var(--ink2);padding:0 4px}
 .soli-sheetx:hover{color:var(--ink)}
 .soli-sharepreview{display:block;width:100%;max-width:230px;margin:14px auto 0;border-radius:12px;border:1px solid var(--line)}
@@ -3487,7 +3486,7 @@ function Styles() {
 
 .soli-empty{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:42px 28px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
 .soli-emptymark{width:60px;height:60px;border-radius:50%;background:var(--clay);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:6px;box-shadow:0 6px 16px rgba(188,107,76,.3)}
-.soli-empty h2{font-family:'Fraunces',serif;font-size:22px;font-weight:600;margin:0}
+.soli-empty h2{font-family:var(--font-fraunces),serif;font-size:22px;font-weight:600;margin:0}
 .soli-empty p{color:var(--ink2);font-size:14px;margin:0 0 10px;max-width:400px;line-height:1.5}
 .soli-empty .soli-cta{max-width:320px}
 .soli-emptyhint{margin-top:16px;font-size:12.5px;color:var(--ink2);text-align:center;line-height:1.5}
@@ -3531,7 +3530,7 @@ function Styles() {
 .soli-exprowline:last-child{border-bottom:none}
 .soli-expdate{color:var(--ink2);font-size:12.5px}
 .soli-expnote{color:var(--ink2)}
-.soli-expamt{font-family:'Fraunces',serif;font-weight:600;color:var(--cost)}
+.soli-expamt{font-family:var(--font-fraunces),serif;font-weight:600;color:var(--cost)}
 .soli-expactions{display:flex;align-items:center;gap:10px;justify-content:flex-end}
 /* Phone tab bar. Hidden on wider screens, where the header nav fits fine. */
 .soli-tabbar{display:none}
@@ -3580,7 +3579,7 @@ function Styles() {
 .soli-simtotal.on{background:linear-gradient(150deg,#EDF0E2,#E3E8D2);border-color:#D3DBBC}
 [data-theme="dark"] .soli-simtotal.on{background:linear-gradient(150deg,#252f1e,#212a1b);border-color:#3d4b2d}
 .soli-simtotalrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13.5px;color:var(--ink2);padding:3px 0}
-.soli-simtotalrow b{font-family:'Fraunces',serif;font-size:16px;color:var(--ink)}
+.soli-simtotalrow b{font-family:var(--font-fraunces),serif;font-size:16px;color:var(--ink)}
 .soli-simtotalrow.main{border-top:1px solid rgba(0,0,0,.10);margin-top:6px;padding-top:9px;font-size:14.5px;color:var(--ink)}
 [data-theme="dark"] .soli-simtotalrow.main{border-top-color:rgba(255,255,255,.12)}
 .soli-simtotalrow.main b{font-size:21px}
@@ -3589,7 +3588,7 @@ function Styles() {
 .soli-simnote{font-size:12px;color:var(--ink2);line-height:1.5;margin:12px 0 10px}
 .soli-onboard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:20px}
 .soli-onboardtop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.soli-onboardtitle{font-family:'Fraunces',serif;font-size:17px;font-weight:600}
+.soli-onboardtitle{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600}
 .soli-onboardcount{font-size:12.5px;color:var(--ink2);margin-top:1px}
 .soli-onboardtrack{height:6px;background:var(--surface2);border-radius:4px;overflow:hidden;margin:11px 0 14px}
 .soli-onboardfill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--sage),var(--sage-d));transition:width .5s cubic-bezier(.2,.8,.2,1)}
@@ -3613,8 +3612,8 @@ function Styles() {
 .soli-goaledit .soli-input{margin:0;width:120px;padding:7px 10px;font-size:14px}
 .soli-goaledit .soli-cta{width:auto;margin:0;padding:8px 14px;box-shadow:none}
 .soli-goalnums{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.soli-goalval{font-family:'Fraunces',serif;font-size:28px;font-weight:600;line-height:1.1}
-.soli-goalpct{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--sage-d)}
+.soli-goalval{font-family:var(--font-fraunces),serif;font-size:28px;font-weight:600;line-height:1.1}
+.soli-goalpct{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600;color:var(--sage-d)}
 .soli-goaltrack{height:10px;background:var(--surface2);border-radius:6px;overflow:hidden;margin:10px 0 9px}
 .soli-goalfill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--sage),var(--sage-d));transition:width .7s cubic-bezier(.2,.8,.2,1)}
 .soli-goal.met .soli-goalfill{background:linear-gradient(90deg,var(--gold),#A9863A)}
@@ -3630,8 +3629,8 @@ function Styles() {
 .soli-planopt:disabled{opacity:.55;cursor:not-allowed}
 .soli-planname{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink2)}
 .soli-planbadge2{font-style:normal;font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;background:var(--clay);color:#fff;padding:2px 7px;border-radius:20px}
-.soli-planprice{font-family:'Fraunces',serif;font-size:24px;font-weight:600;line-height:1.15}
-.soli-planprice small{font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--ink2);margin-left:2px}
+.soli-planprice{font-family:var(--font-fraunces),serif;font-size:24px;font-weight:600;line-height:1.15}
+.soli-planprice small{font-family:var(--font-hanken),system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--ink2);margin-left:2px}
 .soli-planfoot{font-size:11.5px;color:var(--ink2)}
 .soli-danger{margin-top:26px;background:#FBEFE9;border:1px solid #E8C4B0;border-radius:14px;padding:16px 18px}
 .soli-danger .soli-datahead{color:var(--clay-d)}
@@ -3687,9 +3686,9 @@ function Styles() {
 
 .soli-paywall{max-width:440px;text-align:center;padding:28px 26px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .soli-paywall .soli-logomark{margin-bottom:10px}
-.soli-paywall h1{font-family:'Fraunces',serif;font-size:27px;font-weight:600;margin:0 0 4px;letter-spacing:-.5px}
+.soli-paywall h1{font-family:var(--font-fraunces),serif;font-size:27px;font-weight:600;margin:0 0 4px;letter-spacing:-.5px}
 .soli-paywall p{color:var(--ink2);font-size:14.5px;margin:0 0 6px;line-height:1.5}
-.soli-payprice{font-family:'Fraunces',serif;font-size:20px;color:var(--ink);margin:8px 0 6px}
+.soli-payprice{font-family:var(--font-fraunces),serif;font-size:20px;color:var(--ink);margin:8px 0 6px}
 .soli-payprice b{font-size:32px;color:var(--clay-d)}
 .soli-paywall .soli-cta{max-width:320px}
 .soli-paynote{font-size:12.5px;color:var(--ink2);margin-top:10px}

@@ -1,9 +1,31 @@
 import "./globals.css";
+import { Fraunces, Hanken_Grotesk } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import SWRegister from "@/components/SWRegister";
 import ErrorReporter from "@/components/ErrorReporter";
 
 import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
+
+/* Self-hosted at build time and served from our own origin.
+
+   These used to load through an @import inside a <style> block on every page,
+   which is the slowest way to ask for a font: the browser cannot see the
+   request until it has parsed the CSS, and then it blocks rendering on a
+   third-party host. On an Instagram in-app browser over mobile data that is a
+   visible stall on the first screen anyone sees. `swap` means text is readable
+   in a fallback immediately rather than invisible while the font arrives. */
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  axes: ["opsz"], // optical sizing, which the display face relies on
+  display: "swap",
+  variable: "--font-fraunces",
+});
+
+const hanken = Hanken_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-hanken",
+});
 
 const title = SITE_TITLE;
 const description = SITE_DESCRIPTION;
@@ -55,7 +77,7 @@ const themeInit = `(function(){try{var t=localStorage.getItem('soli-theme');if(t
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${fraunces.variable} ${hanken.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>

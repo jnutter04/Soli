@@ -31,8 +31,7 @@ export default function LegalShell({ title, updated, children }) {
 function LegalStyles() {
   return (
     <style>{`
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-.legal{min-height:100vh;background:#F6EFE4;color:#2B2118;font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.6;
+.legal{min-height:100vh;background:#F6EFE4;color:#2B2118;font-family:var(--font-hanken),system-ui,sans-serif;line-height:1.6;
   background-image:radial-gradient(circle at 12% 0%,rgba(201,162,75,.10),transparent 42%)}
 .legal *{box-sizing:border-box}
 .legal a{color:#A4583B;text-decoration:none}
@@ -40,12 +39,12 @@ function LegalStyles() {
 .legal-nav{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:20px 24px}
 .legal-brand{display:flex;align-items:center;gap:9px;color:#2B2118}
 .legal-mark{width:30px;height:30px;border-radius:50%;background:#BC6B4C;display:flex;align-items:center;justify-content:center}
-.legal-word{font-family:'Fraunces',serif;font-weight:600;font-size:22px;letter-spacing:-.5px}
+.legal-word{font-family:var(--font-fraunces),serif;font-weight:600;font-size:22px;letter-spacing:-.5px}
 .legal-open{font-size:14px;font-weight:600}
 .legal-main{max-width:760px;margin:0 auto;padding:20px 24px 80px}
-.legal-main h1{font-family:'Fraunces',serif;font-weight:600;font-size:36px;letter-spacing:-.6px;margin:14px 0 4px}
+.legal-main h1{font-family:var(--font-fraunces),serif;font-weight:600;font-size:36px;letter-spacing:-.6px;margin:14px 0 4px}
 .legal-updated{color:#6E5E4C;font-size:14px;margin:0 0 30px}
-.legal-main h2{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin:32px 0 8px}
+.legal-main h2{font-family:var(--font-fraunces),serif;font-weight:600;font-size:21px;margin:32px 0 8px}
 .legal-main p{margin:0 0 14px;font-size:15.5px;color:#3a2f24}
 .legal-main ul{margin:0 0 14px;padding-left:22px}
 .legal-main li{margin:0 0 8px;font-size:15.5px;color:#3a2f24}
