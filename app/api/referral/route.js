@@ -58,7 +58,7 @@ export async function GET() {
     const admin = createAdminClient();
     const { data: row } = await admin
       .from("user_state")
-      .select("referral_code, referral_count")
+      .select("referral_code")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -75,7 +75,20 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ code, count: row?.referral_count || 0 });
+    /* Counted from the accounts that actually used the code rather than from a
+       stored tally. Two people signing up at once each read the old total and
+       wrote the same new one, so a running counter lost referrals; this cannot.
+       referral_count is left in the table but no longer read or written. */
+    let count = 0;
+    if (code) {
+      const { count: used } = await admin
+        .from("user_state")
+        .select("user_id", { count: "exact", head: true })
+        .eq("referred_by", code);
+      count = used || 0;
+    }
+
+    return NextResponse.json({ code, count });
   } catch (e) {
     console.error("referral GET error:", e);
     return NextResponse.json({ error: "Could not load your referral link." }, { status: 500 });
@@ -108,29 +121,32 @@ export async function POST(request) {
 
     const { data: referrer } = await admin
       .from("user_state")
-      .select("user_id, trial_ends_at, subscription_status, stripe_customer_id, referral_count")
+      .select("user_id, trial_ends_at, subscription_status, stripe_customer_id")
       .eq("referral_code", entered)
       .maybeSingle();
     if (!referrer) return NextResponse.json({ error: "That link isn't valid." }, { status: 400 });
 
     // Reward the new user first: a longer runway to actually try Soli.
     const myBase = Math.max(Date.now(), new Date(me.trial_ends_at || 0).getTime() || 0);
-    const { error: claimErr } = await admin
+    const { data: claimed, error: claimErr } = await admin
       .from("user_state")
       .update({
         referred_by: entered,
         trial_ends_at: new Date(myBase + REWARD_DAYS * 864e5).toISOString(),
       })
       .eq("user_id", user.id)
-      .is("referred_by", null); // guards against a double claim
+      .is("referred_by", null) // guards against a double claim
+      .select("user_id");
     if (claimErr) throw claimErr;
 
-    const rewardKind = await rewardReferrer(admin, referrer);
-    await admin
-      .from("user_state")
-      .update({ referral_count: (referrer.referral_count || 0) + 1 })
-      .eq("user_id", referrer.user_id);
+    /* The guard above only protects the claim, not what follows it. An update
+       that matches nothing is not an error, so without this check two requests
+       arriving together both sail on and reward the referrer twice, which for a
+       subscriber is twice a real invoice credit. Zero rows means someone else
+       already claimed this account, and the reward has been paid once. */
+    if (!claimed || claimed.length === 0) return NextResponse.json({ ok: true, already: true });
 
+    const rewardKind = await rewardReferrer(admin, referrer);
     return NextResponse.json({ ok: true, rewardDays: REWARD_DAYS, rewardKind });
   } catch (e) {
     console.error("referral claim error:", e);

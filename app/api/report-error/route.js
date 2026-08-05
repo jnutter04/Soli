@@ -21,7 +21,13 @@ export async function POST(request) {
       userId = user?.id || null;
     } catch { /* anonymous report is still worth having */ }
 
-    await sendAlert({ source: body?.source === "boundary" ? "client (render crash)" : "client", message, detail, url, userId });
+    /* A signed-in report came from someone we can identify and is worth the
+       normal allowance. An anonymous one may equally be a stranger posting to
+       this endpoint in a loop, so it draws on the smaller budget instead. */
+    await sendAlert({
+      source: body?.source === "boundary" ? "client (render crash)" : "client",
+      message, detail, url, userId, trusted: !!userId,
+    });
   } catch (e) {
     console.error("report-error failed:", e?.message);
   }

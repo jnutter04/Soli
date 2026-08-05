@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
@@ -366,6 +366,18 @@ export default function Soli() {
     } catch { return { ok: false, error: "Something went wrong. Try again." }; }
   };
 
+  /* Saves the server never took, as field -> the value it should have.
+
+     An optimistic screen looks identical whether the write landed or not, so
+     without this a day of logged services reads as saved right up until the
+     refresh that loses it. Holding the value means the banner can offer to
+     put it back rather than only apologise for it. */
+  const pending = useRef({});
+  const [pendingFields, setPendingFields] = useState([]);
+  const [retrying, setRetrying] = useState(false);
+  const [online, setOnline] = useState(true);
+  const syncPending = () => setPendingFields(Object.keys(pending.current));
+
   /* Show the change straight away, then let the save settle it. If another
      device wrote at the same time the server merges both and hands back the
      reconciled list, so their work appears here instead of being lost. */
@@ -373,7 +385,18 @@ export default function Soli() {
     setter(value);
     if (!userId) return;
     saveField(supabase, userId, field, value).then((res) => {
-      if (res?.ok && res.value !== value) setter(res.value);
+      if (res?.ok) {
+        // A later save carries every earlier edit, so success clears the field.
+        if (field in pending.current) { delete pending.current[field]; syncPending(); }
+        if (res.value !== value) setter(res.value);
+      } else {
+        pending.current[field] = value;
+        syncPending();
+      }
+    }).catch(() => {
+      // Belt and braces: an unsaved change must never be lost to a stray throw.
+      pending.current[field] = value;
+      syncPending();
     });
   };
   const saveLogs = (v) => persist("logs", v, setLogs);
@@ -447,6 +470,55 @@ export default function Soli() {
   const savePlan = (v) => persist("plan", v, setPlan);
   const saveExpenses = (v) => persist("expenses", v, setExpenses);
 
+  /* Puts the held values back on the server. Runs one field at a time because
+     saveField serialises writes anyway, and a partial success is still worth
+     keeping: whatever lands drops off the banner. */
+  const setterFor = { logs: setLogs, clients: setClients, products: setProducts, settings: setSettings, plan: setPlan, expenses: setExpenses };
+  const retryPending = async () => {
+    if (!userId || retrying) return;
+    setRetrying(true);
+    try {
+      for (const [field, value] of Object.entries(pending.current)) {
+        const res = await saveField(supabase, userId, field, value);
+        if (res?.ok) {
+          delete pending.current[field];
+          if (res.value !== value) setterFor[field]?.(res.value);
+        }
+      }
+    } catch { /* whatever did not land stays held, and the banner stays up */ }
+    // Always released, or a failed retry would leave the button dead for good.
+    syncPending();
+    setRetrying(false);
+  };
+  // Kept current so the listeners below always call the latest version.
+  const retryRef = useRef(retryPending);
+  retryRef.current = retryPending;
+
+  useEffect(() => {
+    const go = () => { if (Object.keys(pending.current).length) retryRef.current?.(); };
+    // Coming back into signal is the usual cure, so try it without being asked.
+    const up = () => { setOnline(true); go(); };
+    const down = () => setOnline(false);
+    setOnline(navigator.onLine !== false); // read after mount so the server render stays stable
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    const timer = setInterval(go, 30000);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+      clearInterval(timer);
+    };
+  }, []);
+
+  /* Last line of defence. Closing the tab is what turns an unsaved change into
+     a lost one, so it is the one moment worth interrupting. */
+  useEffect(() => {
+    if (!pendingFields.length) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pendingFields.length]);
+
   // Service templates live inside the settings blob (no schema change needed).
   const templates = settings.templates || [];
   const saveTemplates = (v) => saveSettings({ ...settings, templates: v });
@@ -493,6 +565,13 @@ export default function Soli() {
   const inTrial = msLeft > 0;
   const trialDaysLeft = Math.max(0, Math.ceil(msLeft / 864e5));
   const hasAccess = comped || isSubscribed || inGrace || inTrial;
+
+  // Name what is at risk, so the warning points at their work and not at a field.
+  const PENDING_LABEL = { logs: "services", clients: "clients", products: "products", settings: "settings", plan: "plan", expenses: "expenses" };
+  const pendingNames = pendingFields.map((f) => PENDING_LABEL[f] || f);
+  const pendingLabel = pendingNames.length <= 1
+    ? pendingNames[0] || ""
+    : pendingNames.slice(0, -1).join(", ") + " and " + pendingNames[pendingNames.length - 1];
 
   const nav = [
     { id: "dash", label: "Dashboard", Icon: LayoutDashboard },
@@ -595,6 +674,17 @@ export default function Soli() {
       )}
 
       <main className="soli-main">
+        {/* Sits above everything, including billing. Money that was never
+            recorded matters more than money that was never charged. */}
+        {pendingFields.length > 0 && (
+          <div className="soli-trialbar unsaved" role="alert">
+            <span>
+              <AlertTriangle size={14} strokeWidth={2} />
+              Your {pendingLabel} did not save. {online ? "They are on this screen but not on our server yet, so don't close this tab." : "You appear to be offline. Soli will keep trying, so leave this tab open."}
+            </span>
+            <button onClick={retryPending} disabled={retrying}>{retrying ? "Saving…" : "Try again"}</button>
+          </div>
+        )}
         {!comped && !isSubscribed && !inGrace && inTrial && (
           /* The last few days say what actually happens, rather than only
              counting down. Hitting a locked screen unwarned reads as losing
@@ -3572,6 +3662,10 @@ function Styles() {
 .soli-trialbar button:disabled{opacity:.6;cursor:not-allowed}
 .soli-trialbar.grace,.soli-trialbar.ending{background:linear-gradient(150deg,#BC6B4C,#A4583B)}
 .soli-trialbar.ending button{color:var(--clay-d)}
+/* Deeper than the billing bars so unsaved work is never mistaken for a
+   payment notice, which is easy to put off until later. */
+.soli-trialbar.unsaved{background:linear-gradient(150deg,#8F3B2E,#6F2C22)}
+.soli-trialbar.unsaved button{color:#8F3B2E}
 .soli-trialbar.grace button{color:var(--clay-d)}
 
 .soli-billing{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:22px}
