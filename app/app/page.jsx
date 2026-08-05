@@ -193,34 +193,6 @@ const isoWeekNum = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); d.s
    amount, `cost` is treated as a flat per-use cost, exactly like before. */
 const perUnitCost = (p) => (p && Number(p.amount) > 0 ? p.cost / p.amount : (p ? Number(p.cost) || 0 : 0));
 
-/* Forgivingly parse a pasted service list into { name, price, durationMin } rows.
-   Handles "Classic Facial - $120 - 60 min", "Lash Fill $65 (45 minutes)",
-   "Brow Lamination 85 30m". Leaves price/duration blank when absent. */
-function parseServiceImport(text) {
-  const rows = [];
-  for (const raw of String(text).split(/\n+/)) {
-    let line = raw.trim();
-    if (!line) continue;
-    let durationMin = "";
-    let m = line.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr|h)\b/i);
-    if (m) { durationMin = Math.round(parseFloat(m[1]) * 60); line = line.replace(m[0], " "); }
-    else {
-      m = line.match(/(\d+)\s*(?:minutes?|mins?|min|m)\b/i);
-      if (m) { durationMin = parseInt(m[1], 10); line = line.replace(m[0], " "); }
-    }
-    let price = "";
-    m = line.match(/[$£€]\s*(\d+(?:\.\d+)?)/);
-    if (m) { price = parseFloat(m[1]); line = line.replace(m[0], " "); }
-    else {
-      m = line.match(/(?:^|\s)(\d{1,4}(?:\.\d{1,2})?)(?=\s|$)/);
-      if (m) { price = parseFloat(m[1]); line = line.replace(m[1], " "); }
-    }
-    const name = line.replace(/[-|(),:]+/g, " ").replace(/\s{2,}/g, " ").trim();
-    if (!name) continue;
-    rows.push({ id: uid(), name, price, durationMin });
-  }
-  return rows;
-}
 
 /* ================================ APP ==================================== */
 export default function Soli() {
@@ -423,7 +395,27 @@ export default function Soli() {
 
     saveClients(merged);
     saveLogs([...newLogs, ...logs].sort((a, b) => new Date(b.date) - new Date(a.date)));
-    return { services: newLogs.length, clients: newClients.length };
+
+    /* Turn the imported work into quick-log templates too, using each service's
+       most recent price and length. Someone who brings their history over
+       almost certainly performs those same services, so this saves them
+       rebuilding their menu by hand. */
+    const have = new Set(templates.map((t) => t.name.trim().toLowerCase()));
+    const seen = {};
+    newLogs.forEach((l) => {
+      const key = l.service.trim().toLowerCase();
+      if (!key || have.has(key)) return;
+      const prev = seen[key];
+      if (!prev || new Date(l.date) > new Date(prev.date)) {
+        seen[key] = { date: l.date, name: l.service.trim(), price: l.price, durationMin: l.durationMin, paySource: l.paySource };
+      }
+    });
+    const madeTpls = Object.values(seen).map((t) => ({
+      id: uid(), name: t.name, price: t.price, durationMin: t.durationMin, paySource: t.paySource || "card", qty: {},
+    }));
+    if (madeTpls.length) saveTemplates([...madeTpls, ...templates]);
+
+    return { services: newLogs.length, clients: newClients.length, templates: madeTpls.length };
   };
   // A mistyped price would otherwise stay wrong forever and quietly skew every
   // figure, including the tax export, so logged services must be fixable.
@@ -1189,9 +1181,6 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
   const [qty, setQty] = useState({});
   const [saved, setSaved] = useState(false);
   const [tplSaved, setTplSaved] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importRows, setImportRows] = useState(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState("");
@@ -1273,16 +1262,6 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     saveTemplates([...toAdd, ...templates]);
   };
 
-  const updateImportRow = (id, key, v) => setImportRows(rows => rows.map(r => r.id === id ? { ...r, [key]: v } : r));
-  const removeImportRow = (id) => setImportRows(rows => rows.filter(r => r.id !== id));
-  const confirmImport = () => {
-    const valid = (importRows || []).filter(r => String(r.name).trim());
-    const newTpls = valid.map(r => ({ id: uid(), name: String(r.name).trim(), price: Number(r.price) || 0, durationMin: Number(r.durationMin) || 0, paySource: "card", qty: {} }));
-    const names = new Set(newTpls.map(t => t.name.toLowerCase()));
-    const kept = templates.filter(t => !names.has(t.name.toLowerCase()));
-    saveTemplates([...newTpls, ...kept]);
-    setImportOpen(false); setImportText(""); setImportRows(null);
-  };
 
   const applyVoice = (text) => {
     const lower = text.toLowerCase();
@@ -1362,46 +1341,6 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
           Saw several clients today? Log the whole day at once
         </button>
       )}
-
-      <div className="soli-import">
-        <button type="button" className="soli-importtoggle" onClick={() => { setImportOpen(o => !o); setImportRows(null); }}>
-          {importOpen ? "Close import" : "Import services from your booking app"}
-        </button>
-        {importOpen && (
-          <div className="soli-importpanel">
-            {!importRows ? (
-              <>
-                <p className="soli-help" style={{ marginTop: 0 }}>Paste your service list, one per line (from Booksy, etc.). Soli pulls out the name, price, and time.</p>
-                <textarea className="soli-importta" rows={6} value={importText} onChange={e => setImportText(e.target.value)}
-                  placeholder={"Classic Facial - $120 - 60 min\nLash Fill $65 (45 minutes)\nBrow Lamination 85 30m"} />
-                <button className="soli-cta sm" onClick={() => setImportRows(parseServiceImport(importText))} disabled={!importText.trim()}>Preview</button>
-              </>
-            ) : (
-              <>
-                {importRows.length === 0 ? (
-                  <p className="soli-help" style={{ marginTop: 0 }}>Nothing recognized. Check the format and try again.</p>
-                ) : (
-                  <div className="soli-invtable">
-                    <div className="soli-importhead"><span>Service</span><span>Price</span><span>Min</span><span></span></div>
-                    {importRows.map(r => (
-                      <div className="soli-importrow" key={r.id}>
-                        <input className="soli-input slim" value={r.name} onChange={e => updateImportRow(r.id, "name", e.target.value)} />
-                        <input className="soli-input slim" type="number" placeholder="?" value={r.price} onChange={e => updateImportRow(r.id, "price", e.target.value)} />
-                        <input className="soli-input slim" type="number" placeholder="?" value={r.durationMin} onChange={e => updateImportRow(r.id, "durationMin", e.target.value)} />
-                        <button className="soli-iconbtn" onClick={() => removeImportRow(r.id)}><Trash2 size={15} /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="soli-editactions">
-                  <button className="soli-cta sm" onClick={confirmImport} disabled={!importRows.some(r => String(r.name).trim())}>Add {importRows.filter(r => String(r.name).trim()).length} services</button>
-                  <button className="soli-editbtn" onClick={() => setImportRows(null)}>Back</button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
 
       <Field label="Client">
         <select className="soli-input" value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!newClient}>
@@ -2983,7 +2922,7 @@ function Styles() {
    them. Letting them shrink is what keeps narrow layouts tidy. */
 .soli-row2 > *, .soli-row3 > *, .soli-row4 > *, .soli-exprow > *,
 .soli-invrow > *, .soli-invhead > *, .soli-weekrow > *, .soli-weekhead > *,
-.soli-exprowline > *, .soli-exphead > *, .soli-importrow > *, .soli-bucketrow > * { min-width: 0 }
+.soli-exprowline > *, .soli-exphead > *, .soli-improw > *, .soli-bucketrow > * { min-width: 0 }
 .soli-input, .soli-qty, .soli-stockbtn { max-width: 100% }
 .soli-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .soli-row3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
@@ -3066,12 +3005,8 @@ function Styles() {
 .soli-import{margin-bottom:20px}
 .soli-importtoggle{width:100%;border:1px dashed var(--line);background:var(--surface2);color:var(--clay-d);font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:11px;cursor:pointer;transition:.15s}
 .soli-importtoggle:hover{border-color:var(--clay)}
-.soli-importpanel{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
 .soli-importta{width:100%;font-family:'SFMono-Regular',ui-monospace,Menlo,monospace;font-size:13px;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:12px;outline:none;resize:vertical}
 .soli-importta:focus{border-color:var(--clay)}
-.soli-importhead,.soli-importrow{display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:8px;align-items:center;min-width:360px}
-.soli-importhead{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:6px 4px;border-bottom:1px solid var(--line)}
-.soli-importrow{padding:5px 0}
 .soli-themebtn{padding:8px 11px}
 .soli-trade{margin-bottom:20px;background:var(--surface2);border:1px dashed var(--line);border-radius:14px;padding:16px}
 .soli-tradelabel{font-size:13.5px;font-weight:600;margin-bottom:11px}
