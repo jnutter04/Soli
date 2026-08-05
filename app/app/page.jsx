@@ -596,9 +596,20 @@ export default function Soli() {
 
       <main className="soli-main">
         {!comped && !isSubscribed && !inGrace && inTrial && (
-          <div className="soli-trialbar">
-            <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left in your free trial</span>
-            <button onClick={() => setTab("settings")}>See plans</button>
+          /* The last few days say what actually happens, rather than only
+             counting down. Hitting a locked screen unwarned reads as losing
+             your records, so the ending is spelled out while there is still
+             time to decide either way. */
+          <div className={"soli-trialbar" + (trialDaysLeft <= 3 ? " ending" : "")}>
+            {trialDaysLeft <= 3 ? (
+              <span>
+                <AlertTriangle size={14} strokeWidth={2} />
+                Your trial ends {trialDaysLeft === 1 ? "tomorrow" : `in ${trialDaysLeft} days`}. Nothing gets deleted, but Soli locks until you subscribe.
+              </span>
+            ) : (
+              <span><Sun size={14} strokeWidth={2} /> {trialDaysLeft} days left in your free trial</span>
+            )}
+            <button onClick={() => setTab("settings")}>{trialDaysLeft <= 3 ? "Keep Soli" : "See plans"}</button>
           </div>
         )}
         {inGrace && (
@@ -3559,7 +3570,8 @@ function Styles() {
 .soli-trialbar button{border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:#fff;color:var(--clay-d);padding:8px 14px;border-radius:9px;transition:.15s}
 .soli-trialbar button:hover{background:#FFF4E9}
 .soli-trialbar button:disabled{opacity:.6;cursor:not-allowed}
-.soli-trialbar.grace{background:linear-gradient(150deg,#BC6B4C,#A4583B)}
+.soli-trialbar.grace,.soli-trialbar.ending{background:linear-gradient(150deg,#BC6B4C,#A4583B)}
+.soli-trialbar.ending button{color:var(--clay-d)}
 .soli-trialbar.grace button{color:var(--clay-d)}
 
 .soli-billing{background:var(--surface2);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:22px}
