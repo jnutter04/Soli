@@ -622,7 +622,7 @@ export default function Soli() {
           templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty}
           updateLog={updateLog} deleteLog={deleteLog} />}
         {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} logs={logs} boothRate={rent} />}
-        {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} rent={rent} />}
+        {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} saveLogs={saveLogs} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} logs={logs} />}
         {tab === "exp" && <ExpensesView expenses={expenses} saveExpenses={saveExpenses} ready={expensesReady} />}
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
@@ -1771,7 +1771,7 @@ function riskFor(clientLogs) {
   return { usualDays: Math.round(usualDays), sinceDays: Math.round(sinceDays), ratio, level };
 }
 
-function ClientsView({ clients, logs, saveClients, rent }) {
+function ClientsView({ clients, logs, saveClients, saveLogs, rent }) {
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", notes: "", rebookWeeks: 4 });
@@ -1814,6 +1814,13 @@ function ClientsView({ clients, logs, saveClients, rent }) {
       ? `\n\n${c?.name || "This client"} has ${s.services} logged ${s.services === 1 ? "service" : "services"} worth ${money2(s.profit)} in profit.\n\nThose stay in your totals and tax figures, but they will no longer be linked to anyone, and their visit history cannot be recovered.`
       : "";
     if (!confirm(`Remove ${c?.name || "this client"}?${detail}`)) return;
+    /* Write the name onto their services before the client record goes. The
+       services have to stay, since the money is real and belongs in the totals
+       and tax figures, and without the name they would read as belonging to
+       nobody, including on the summary handed to an accountant. */
+    if (s.services > 0 && c?.name) {
+      saveLogs(logs.map((l) => l.clientId === id ? { ...l, clientName: c.name } : l));
+    }
     saveClients(clients.filter((x) => x.id !== id));
     setOpen(null);
   };
@@ -1985,7 +1992,20 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
     setName(""); setCost(""); setAmount(""); setUnit("use"); setProdSpec(specialty || "");
   };
   const upd = (id, key, v) => saveProducts(products.map(p => p.id === id ? { ...p, [key]: (key === "name" || key === "unit" || key === "specialty") ? v : Number(v) } : p));
-  const del = (id) => saveProducts(products.filter(p => p.id !== id));
+  /* Past services keep the cost they were logged with, so removing a product
+     never rewrites history or moves any money. What does go is the stock count
+     and the record of what this product cost, so that is what the warning
+     names rather than a bare "are you sure". */
+  const del = (id) => {
+    const p = products.find((x) => x.id === id);
+    const usedIn = (logs || []).filter((l) => l.qty && l.qty[id]).length;
+    const bits = [];
+    if (usedIn > 0) bits.push(`${usedIn} logged ${usedIn === 1 ? "service uses" : "services use"} it. Their product cost stays exactly as it is.`);
+    if (stockFor(p, logs)) bits.push("Its stock count will be forgotten.");
+    const detail = bits.length ? `\n\n${bits.join("\n")}` : "";
+    if (!confirm(`Remove ${p?.name || "this product"}?${detail}`)) return;
+    saveProducts(products.filter((x) => x.id !== id));
+  };
   const loadStarters = () => {
     if (!specialty) return;
     const starters = (STARTER_PRODUCTS[specialty] || []).map(([n, c, a, u]) => ({ id: uid(), name: n, cost: c, amount: a, unit: u, specialty, stock: 0 }));
@@ -2285,9 +2305,11 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
   /* An empty id means it was logged without a client, which is normal for a
      walk-in. An id that no longer matches anyone means the client was removed,
      and saying so is clearer than implying the service never had one. */
-  const nameOf = (id) => {
+  const nameOf = (id, log) => {
     if (!id) return "No client";
-    return (clients.find((c) => c.id === id) || {}).name || "Removed client";
+    const hit = clients.find((c) => c.id === id);
+    if (hit) return hit.name;
+    return log?.clientName ? `${log.clientName} (removed)` : "Removed client";
   };
 
   const startEdit = (l) => {
@@ -2311,7 +2333,7 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
     setOpen(null);
   };
   const remove = (l) => {
-    if (confirm(`Delete "${l.service}" for ${nameOf(l.clientId)}? This cannot be undone.`)) {
+    if (confirm(`Delete "${l.service}" for ${nameOf(l.clientId, l)}? This cannot be undone.`)) {
       deleteLog(l.id);
       setOpen(null);
     }
@@ -2352,7 +2374,7 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
             <button className="soli-recentbtn" onClick={() => startEdit(l)}>
               <span className="soli-recentmain">
                 <span className="soli-recentsvc">{l.service}</span>
-                <span className="soli-recentmeta">{fmtDate(l.date)} · {nameOf(l.clientId)} · {srcLabel(l.paySource)}</span>
+                <span className="soli-recentmeta">{fmtDate(l.date)} · {nameOf(l.clientId, l)} · {srcLabel(l.paySource)}</span>
               </span>
               <span className="soli-recentamt">
                 {money2(l.price)}
@@ -2637,7 +2659,14 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
   const [year, setYear] = useState(years[0] || new Date().getFullYear());
   useEffect(() => { if (years.length && !years.includes(year)) setYear(years[0]); }, [years, year]);
 
-  const nameOf = (id) => (clients.find((c) => c.id === id) || {}).name || "";
+  /* A removed client still has to appear by name here, or the accountant gets
+     rows of income with no idea who they came from. */
+  const nameOf = (id, log) => {
+    if (!id) return "";
+    const hit = clients.find((c) => c.id === id);
+    if (hit) return hit.name;
+    return log?.clientName ? `${log.clientName} (removed)` : "Removed client";
+  };
   const rows = useMemo(() => (logs || []).filter((l) => new Date(l.date).getFullYear() === year), [logs, year]);
 
   const expRows = useMemo(
@@ -2696,7 +2725,7 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
       .sort((a, b) => new Date(a.date) - new Date(b.date))
       .map((l) => {
         const b = (l.durationMin / 60) * rent;
-        return [ymd(l.date), nameOf(l.clientId), l.service, srcLabel(l.paySource), cur,
+        return [ymd(l.date), nameOf(l.clientId, l), l.service, srcLabel(l.paySource), cur,
           round2(l.price), round2(Number(l.tip) || 0), round2(l.productCost), round2(b),
           round2(l.price - l.productCost - b), l.durationMin];
       });
