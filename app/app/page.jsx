@@ -2295,6 +2295,48 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
 function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
   const [open, setOpen] = useState(null);
   const [form, setForm] = useState({});
+  const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
+  const [month, setMonth] = useState("all");
+  const [limit, setLimit] = useState(50);
+
+  const sorted = useMemo(
+    () => [...(logs || [])].sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [logs]
+  );
+
+  /* Months that actually contain work, newest first, so the filter only ever
+     offers periods there is something to see. */
+  const months = useMemo(() => {
+    const seen = new Map();
+    sorted.forEach((l) => {
+      const d = new Date(l.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!seen.has(key)) seen.set(key, d.toLocaleDateString(undefined, { month: "long", year: "numeric" }));
+    });
+    return [...seen.entries()];
+  }, [sorted]);
+
+  const nameFor = (l) => {
+    if (!l.clientId) return "";
+    const hit = clients.find((c) => c.id === l.clientId);
+    return hit ? hit.name : (l.clientName || "");
+  };
+
+  const q = query.trim().toLowerCase();
+  const filtered = useMemo(() => sorted.filter((l) => {
+    if (month !== "all") {
+      const d = new Date(l.date);
+      if (`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` !== month) return false;
+    }
+    if (!q) return true;
+    return String(l.service || "").toLowerCase().includes(q) || nameFor(l).toLowerCase().includes(q);
+  }), [sorted, month, q, clients]);
+
+  /* Imports can bring in months at once, so the list grows in pages rather than
+     rendering hundreds of editable rows nobody asked to see. */
+  const searching = showAll && (q !== "" || month !== "all");
+  const visible = showAll ? filtered.slice(0, limit) : filtered.slice(0, 12);
 
   const recent = useMemo(
     () => [...(logs || [])].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 12),
@@ -2341,9 +2383,43 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
 
   return (
     <section className="soli-block" style={{ marginTop: 24 }}>
-      <div className="soli-blockhead"><Bell size={18} strokeWidth={1.9} /><h2>Recent services</h2></div>
+      <div className="soli-histhead">
+        <div className="soli-blockhead"><Bell size={18} strokeWidth={1.9} /><h2>{showAll ? "All services" : "Recent services"}</h2></div>
+        {sorted.length > 12 && (
+          <button className="soli-linkbtn" onClick={() => { setShowAll(!showAll); setQuery(""); setMonth("all"); setLimit(50); }}>
+            {showAll ? "Show recent only" : `See all ${sorted.length}`}
+          </button>
+        )}
+      </div>
       <p className="soli-note">Tap one to fix a typo or remove it. Corrections update every number in Soli.</p>
-      {recent.map((l) => (
+
+      {showAll && (
+        <div className="soli-histcontrols">
+          <input className="soli-input" type="search" value={query} placeholder="Search service or client"
+            aria-label="Search services" onChange={(e) => { setQuery(e.target.value); setLimit(50); }} />
+          <select className="soli-input" value={month} aria-label="Filter by month"
+            onChange={(e) => { setMonth(e.target.value); setLimit(50); }}>
+            <option value="all">Every month</option>
+            {months.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </div>
+      )}
+
+      {showAll && (
+        <p className="soli-note">
+          {filtered.length === sorted.length
+            ? `${sorted.length} services`
+            : `${filtered.length} of ${sorted.length} services`}
+        </p>
+      )}
+
+      {showAll && filtered.length === 0 && (
+        <p className="soli-emptyhint" style={{ textAlign: "left" }}>
+          Nothing matches. Try a different name, or set the month back to every month.
+        </p>
+      )}
+
+      {visible.map((l) => (
         <div className="soli-recentrow" key={l.id}>
           {open === l.id ? (
             <div className="soli-recentedit">
@@ -2384,6 +2460,12 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
           )}
         </div>
       ))}
+
+      {showAll && filtered.length > visible.length && (
+        <button className="soli-ghost" style={{ marginTop: 12 }} onClick={() => setLimit(limit + 50)}>
+          Show 50 more ({filtered.length - visible.length} still to come)
+        </button>
+      )}
     </section>
   );
 }
@@ -3091,6 +3173,11 @@ function Styles() {
 .soli-flipresult{font-size:14.5px;line-height:1.5}
 .soli-flipresult b{font-family:'Fraunces',serif;font-size:18px;color:var(--clay-d)}
 
+.soli-histhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.soli-histcontrols{display:grid;grid-template-columns:1fr 200px;gap:10px;margin:12px 0 4px}
+.soli-histcontrols > *{min-width:0}
+.soli-histcontrols .soli-input{margin:0}
+@media(max-width:560px){.soli-histcontrols{grid-template-columns:1fr}}
 .soli-search{position:relative;margin-bottom:16px}
 .soli-search .soli-input{margin:0;padding-right:38px}
 .soli-search input[type=search]::-webkit-search-cancel-button{display:none}
