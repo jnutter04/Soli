@@ -3015,13 +3015,17 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
 function ReferralPanel() {
   const [code, setCode] = useState("");
   const [count, setCount] = useState(0);
+  const [pending, setPending] = useState(0);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     fetch("/api/referral")
       .then((r) => r.json())
-      .then((d) => { if (d?.code) { setCode(d.code); setCount(d.count || 0); } else if (d?.error) setErr(d.error); })
+      .then((d) => {
+        if (d?.code) { setCode(d.code); setCount(d.count || 0); setPending(d.pending || 0); }
+        else if (d?.error) setErr(d.error);
+      })
       .catch(() => setErr("Could not load your referral link."));
   }, []);
 
@@ -3043,7 +3047,7 @@ function ReferralPanel() {
     <div className="soli-datatools">
       <div className="soli-datahead">Invite a friend</div>
       <p className="soli-help" style={{ marginTop: 0 }}>
-        Share your link. They get an extra 30 days free, and you get a free month too, added to your trial or credited to your bill.
+        Share your link. They get an extra 30 days free straight away. Your free month lands once they have logged five services, so it counts real people rather than empty signups.
       </p>
       {err && <p className="soli-help" style={{ color: "var(--clay-d)" }}>{err}</p>}
       {code ? (
@@ -3053,8 +3057,15 @@ function ReferralPanel() {
             <button className="soli-cta sm" onClick={share}>Share link</button>
             <button className="soli-ghost" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
           </div>
+          {/* Pending is shown plainly. A reward that now takes days would
+              otherwise read as a scheme that does not work. */}
           <p className="soli-help">
-            {count === 0 ? "No one has joined from your link yet." : `${count} ${count === 1 ? "person has" : "people have"} joined from your link.`}
+            {count === 0 && pending === 0
+              ? "No one has joined from your link yet."
+              : [
+                  count > 0 && `${count} free ${count === 1 ? "month" : "months"} earned`,
+                  pending > 0 && `${pending} still getting started`,
+                ].filter(Boolean).join(", ") + "."}
           </p>
         </>
       ) : !err ? <p className="soli-help">Loading your link…</p> : null}

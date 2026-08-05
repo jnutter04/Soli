@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { stripe, PRICE_ID } from "@/lib/stripe";
+import { REWARD_DAYS } from "@/lib/referralReward";
 
 export const runtime = "nodejs";
 
-const REWARD_DAYS = 30;
 // Unambiguous alphabet: no O/0/I/1, so codes survive being read aloud or
 // typed off a phone screen.
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -14,37 +13,6 @@ function makeCode() {
   let out = "";
   for (let i = 0; i < 6; i++) out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
   return out;
-}
-
-/* Give the referrer a month. Someone mid-trial gets 30 more days; a paying
-   subscriber gets an account credit worth one month, since extending a trial
-   they are no longer on would be worth nothing to them. */
-async function rewardReferrer(admin, row) {
-  const subscribed = row.subscription_status === "active" || row.subscription_status === "trialing";
-
-  if (subscribed && row.stripe_customer_id) {
-    try {
-      const price = await stripe.prices.retrieve(PRICE_ID);
-      const amount = price?.unit_amount || 0;
-      if (amount > 0) {
-        await stripe.customers.createBalanceTransaction(row.stripe_customer_id, {
-          amount: -amount, // negative is a credit against future invoices
-          currency: price.currency || "usd",
-          description: "Soli referral reward: one month",
-        });
-        return "credit";
-      }
-    } catch (e) {
-      console.error("referral credit failed, falling back to trial days:", e?.message);
-    }
-  }
-
-  const base = Math.max(Date.now(), new Date(row.trial_ends_at || 0).getTime() || 0);
-  await admin
-    .from("user_state")
-    .update({ trial_ends_at: new Date(base + REWARD_DAYS * 864e5).toISOString() })
-    .eq("user_id", row.user_id);
-  return "days";
 }
 
 /* Returns the signed-in user's referral code and stats, creating a code on
@@ -78,17 +46,34 @@ export async function GET() {
     /* Counted from the accounts that actually used the code rather than from a
        stored tally. Two people signing up at once each read the old total and
        wrote the same new one, so a running counter lost referrals; this cannot.
-       referral_count is left in the table but no longer read or written. */
-    let count = 0;
+       referral_count is left in the table but no longer read or written.
+
+       Split into paid and pending, because a reward now arrives days after the
+       friend joins. Without showing the pending ones the panel would look like
+       nothing happened, and a referral scheme that appears broken stops being
+       shared. */
+    let count = 0, pending = 0;
     if (code) {
-      const { count: used } = await admin
+      const { data: joined, error: joinErr } = await admin
         .from("user_state")
-        .select("user_id", { count: "exact", head: true })
+        .select("referral_rewarded_at")
         .eq("referred_by", code);
-      count = used || 0;
+
+      if (joinErr) {
+        // Before the migration there is no paid/pending split to show, so fall
+        // back to a plain count rather than reporting nobody joined.
+        const { count: total } = await admin
+          .from("user_state")
+          .select("user_id", { count: "exact", head: true })
+          .eq("referred_by", code);
+        count = total || 0;
+      } else {
+        count = (joined || []).filter((r) => r.referral_rewarded_at).length;
+        pending = (joined || []).length - count;
+      }
     }
 
-    return NextResponse.json({ code, count });
+    return NextResponse.json({ code, count, pending });
   } catch (e) {
     console.error("referral GET error:", e);
     return NextResponse.json({ error: "Could not load your referral link." }, { status: 500 });
@@ -119,9 +104,10 @@ export async function POST(request) {
       return NextResponse.json({ error: "You can't use your own link." }, { status: 400 });
     }
 
+    // Only checked to be real. Who they are matters at payout time, not now.
     const { data: referrer } = await admin
       .from("user_state")
-      .select("user_id, trial_ends_at, subscription_status, stripe_customer_id")
+      .select("user_id")
       .eq("referral_code", entered)
       .maybeSingle();
     if (!referrer) return NextResponse.json({ error: "That link isn't valid." }, { status: 400 });
@@ -146,8 +132,10 @@ export async function POST(request) {
        already claimed this account, and the reward has been paid once. */
     if (!claimed || claimed.length === 0) return NextResponse.json({ ok: true, already: true });
 
-    const rewardKind = await rewardReferrer(admin, referrer);
-    return NextResponse.json({ ok: true, rewardDays: REWARD_DAYS, rewardKind });
+    /* The referrer is not paid here. Signing up costs nothing, so paying on
+       signup paid for throwaway accounts; the daily job pays once this account
+       shows a person is behind it. See lib/referralReward.js. */
+    return NextResponse.json({ ok: true, rewardDays: REWARD_DAYS });
   } catch (e) {
     console.error("referral claim error:", e);
     return NextResponse.json({ error: "Could not apply that link." }, { status: 500 });

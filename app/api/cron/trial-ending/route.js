@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { daysLeft, shouldWarn, trialSummary, emailHtml } from "@/lib/trialEmail";
+import { qualifies, rewardReferrer } from "@/lib/referralReward";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,11 +32,25 @@ export async function GET(request) {
     if (!data || (data.users || []).length < 200) break;
   }
 
-  // `comped` was added later than the rest, so fall back if it isn't there yet.
-  const cols = "user_id, trial_ends_at, subscription_status, settings, logs, clients";
-  let { data: rows, error } = await admin.from("user_state").select(cols + ", comped");
-  if (error) ({ data: rows, error } = await admin.from("user_state").select(cols));
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  /* Columns are tried richest first and stepped down.
+
+     Both `comped` and the referral columns arrived after the table did, and a
+     deploy can land before its migration is run. Asking for a column that does
+     not exist fails the whole query, which would take the trial warnings down
+     with it, so a missing column costs only the feature that needs it. */
+  const BASE = "user_id, trial_ends_at, subscription_status, stripe_customer_id, settings, logs, clients";
+  const REF = ", referral_code, referred_by, referral_rewarded_at";
+  let rows = null, canPayReferrals = false;
+  for (const [cols, withReferrals] of [
+    [BASE + REF + ", comped", true],
+    [BASE + REF, true],
+    [BASE + ", comped", false],
+    [BASE, false],
+  ]) {
+    const { data, error } = await admin.from("user_state").select(cols);
+    if (!error) { rows = data; canPayReferrals = withReferrals; break; }
+  }
+  if (!rows) return NextResponse.json({ error: "Could not read accounts." }, { status: 500 });
 
   const now = Date.now();
   let sent = 0, skipped = 0, failed = 0;
@@ -72,5 +87,50 @@ export async function GET(request) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent, skipped, failed });
+  const referrals = canPayReferrals
+    ? await payReferrals(admin, rows || [])
+    : { skipped: "referral columns not migrated yet" };
+  return NextResponse.json({ ok: true, sent, skipped, failed, referrals });
+}
+
+/* Pays referrers whose friend has since shown they are real.
+
+   Runs here rather than on its own schedule because this job already loads
+   every row once a day, and a fourth cron entry is a fourth thing to go wrong
+   quietly. */
+async function payReferrals(admin, rows) {
+  // Codes are unique, so one pass builds the lookup the payouts need.
+  const byCode = new Map();
+  rows.forEach((r) => { if (r.referral_code) byCode.set(r.referral_code, r); });
+
+  let paid = 0, waiting = 0, failed = 0;
+  for (const referred of rows) {
+    if (!referred.referred_by || referred.referral_rewarded_at) continue;
+    if (!qualifies(referred)) { waiting++; continue; }
+
+    const referrer = byCode.get(referred.referred_by);
+    // The referrer's account is gone, so there is nobody left to pay.
+    if (!referrer || referrer.user_id === referred.user_id) continue;
+
+    try {
+      /* Stamped before paying, and only if it is still unstamped. A crash
+         between the two loses a reward, which is recoverable by hand; paying
+         first and crashing before the stamp would pay again tomorrow, and every
+         tomorrow after that. */
+      const { data: stamped } = await admin
+        .from("user_state")
+        .update({ referral_rewarded_at: new Date().toISOString() })
+        .eq("user_id", referred.user_id)
+        .is("referral_rewarded_at", null)
+        .select("user_id");
+      if (!stamped || stamped.length === 0) continue; // another run got there first
+
+      await rewardReferrer(admin, referrer);
+      paid++;
+    } catch (e) {
+      console.error("referral payout failed:", e?.message);
+      failed++;
+    }
+  }
+  return { paid, waiting, failed };
 }
