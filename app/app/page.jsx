@@ -96,7 +96,17 @@ function buildSeed() {
 function profitOf(log, rent) {
   const booth = (log.durationMin / 60) * rent;
   const profit = log.price - log.productCost - booth;
-  return { booth, profit, perHour: profit / (log.durationMin / 60), margin: profit / log.price };
+  /* A rate needs time, and a margin needs a price. Dividing by zero produced
+     Infinity and NaN, which reached the screen as "$∞" and "$NaN". Imported
+     services often arrive with no duration, so this is reachable. null means
+     "cannot be worked out" and the screens say so instead of printing a symbol. */
+  const hours = log.durationMin / 60;
+  return {
+    booth,
+    profit,
+    perHour: hours > 0 ? profit / hours : null,
+    margin: log.price > 0 ? profit / log.price : null,
+  };
 }
 
 /* ----------------------------- defaults ---------------------------------- */
@@ -709,11 +719,21 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
       m[k] = m[k] || { name: k, count: 0, profit: 0, hours: 0 };
       m[k].count++; m[k].profit += profit; m[k].hours += l.durationMin / 60;
     });
-    return Object.values(m).map(s => ({ ...s, perHour: s.profit / s.hours, avg: s.profit / s.count }))
-      .sort((a, b) => b.perHour - a.perHour);
+    // Services with no recorded time have no hourly rate. They still show, with
+    // their average, but sort last rather than ranking above everything.
+    return Object.values(m)
+      .map(s => ({ ...s, perHour: s.hours > 0 ? s.profit / s.hours : null, avg: s.profit / s.count }))
+      .sort((a, b) => {
+        if (a.perHour === null && b.perHour === null) return b.profit - a.profit;
+        if (a.perHour === null) return 1;
+        if (b.perHour === null) return -1;
+        return b.perHour - a.perHour;
+      });
   }, [month, rent]);
-  const maxPH = Math.max(...byService.map(s => s.perHour), 1);
-  const watch = byService.filter(s => s.perHour < rent * 2.5);
+  const rated = byService.filter(s => s.perHour !== null);
+  const maxPH = Math.max(...rated.map(s => s.perHour), 1);
+  // Only judge a service as a thin earner once there is time to judge it by.
+  const watch = rated.filter(s => s.perHour < rent * 2.5);
 
   const due = clients.map(c => {
     const dueDate = new Date(new Date(c.lastVisit).getTime() + c.rebookWeeks * 7 * 864e5);
@@ -787,7 +807,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
         amount={money2(pocketed)}
         period={rangeTitle}
         statLeft={{ label: "Services", value: String(month.length) }}
-        statRight={{ label: "Per hour", value: money2(byService.length ? byService[0].perHour : 0) }}
+        statRight={{ label: "Per hour", value: money2(rated.length ? rated[0].perHour : 0) }}
       />
 
       <div className="soli-cards">
@@ -849,8 +869,8 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
         <div className="soli-bars">
           {byService.map(s => (
             <div className="soli-barrow" key={s.name}>
-              <div className="soli-barlabel"><span>{s.name}</span><span className="soli-barval">{money2(s.perHour)}/hr</span></div>
-              <div className="soli-bartrack"><div className="soli-barfill" style={{ width: (s.perHour / maxPH) * 100 + "%" }} /></div>
+              <div className="soli-barlabel"><span>{s.name}</span><span className="soli-barval">{s.perHour === null ? "no time set" : money2(s.perHour) + "/hr"}</span></div>
+              <div className="soli-bartrack"><div className="soli-barfill" style={{ width: (s.perHour === null ? 0 : (s.perHour / maxPH) * 100) + "%" }} /></div>
               <div className="soli-barmeta">{s.count}× · {money2(s.avg)} avg each</div>
             </div>
           ))}
@@ -1046,7 +1066,7 @@ function WeeklyView({ logs, rent, taxRate }) {
       w.tips += (Number(l.tip) || 0); w.hours += l.durationMin / 60; w.count++;
     });
     return Object.values(m)
-      .map(w => ({ ...w, kept: w.profit * (1 - t) + w.tips, perHour: w.hours > 0 ? w.profit / w.hours : 0 }))
+      .map(w => ({ ...w, kept: w.profit * (1 - t) + w.tips, perHour: w.hours > 0 ? w.profit / w.hours : null }))
       .sort((a, b) => b.ws - a.ws);
   }, [logs, rent, t]);
 
@@ -1116,7 +1136,7 @@ function WeeklyView({ logs, rent, taxRate }) {
               <span data-label="Booked">{money2(w.booked)}</span>
               <span className="soli-weekcost" data-label="Booth">{money2(w.booth)}</span>
               <span className="soli-weekkept" data-label="Kept">{money2(w.kept)}</span>
-              <span data-label="Per hr">{money2(w.perHour)}</span>
+              <span data-label="Per hr">{w.perHour === null ? "n/a" : money2(w.perHour)}</span>
             </div>
           ))}
         </div>
@@ -1406,7 +1426,7 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
           <div className="soli-prevrow main"><span>You actually keep</span><span>{money2(takeHome)}</span></div>
           {tipN > 0 && <div className="soli-prevrow"><span>+ Tip (separate from profit)</span><span>+ {money2(tipN)}</span></div>}
           {tipN > 0 && <div className="soli-prevrow main"><span>Total you pocket</span><span>{money2(takeHome + tipN)}</span></div>}
-          <div className="soli-prevrow sub"><span>{money2(pv.perHour)}/hr · {Math.round(pv.margin * 100)}% margin · tips excluded</span></div>
+          <div className="soli-prevrow sub"><span>{pv.perHour === null ? "add minutes for an hourly rate" : money2(pv.perHour) + "/hr"}{pv.margin === null ? "" : " · " + Math.round(pv.margin * 100) + "% margin"} · tips excluded</span></div>
         </div>
       )}
 
@@ -1752,7 +1772,20 @@ function ClientsView({ clients, logs, saveClients, rent }) {
     // counts once rather than inflating someone's loyalty.
     return { visits: visitDays(ls).length, services: ls.length, profit, ls: ls.sort((a, b) => new Date(b.date) - new Date(a.date)) };
   };
-  const remove = (id) => { saveClients(clients.filter(c => c.id !== id)); setOpen(null); };
+  /* Removing a client leaves their services in place, which is right: the money
+     was earned and has to stay in your totals and your tax figures. What it does
+     mean is those services are no longer attached to anyone, so the choice is
+     spelled out with the real numbers rather than a bare "are you sure". */
+  const remove = (id) => {
+    const c = clients.find((x) => x.id === id);
+    const s = stats(id);
+    const detail = s.services > 0
+      ? `\n\n${c?.name || "This client"} has ${s.services} logged ${s.services === 1 ? "service" : "services"} worth ${money2(s.profit)} in profit.\n\nThose stay in your totals and tax figures, but they will no longer be linked to anyone, and their visit history cannot be recovered.`
+      : "";
+    if (!confirm(`Remove ${c?.name || "this client"}?${detail}`)) return;
+    saveClients(clients.filter((x) => x.id !== id));
+    setOpen(null);
+  };
   const startEdit = (c) => { setEditing(c.id); setForm({ name: c.name, phone: c.phone || "", notes: c.notes || "", rebookWeeks: c.rebookWeeks || 4 }); };
 
   // Clients drifting past their own normal rhythm, worst first, weighted by what
@@ -2192,7 +2225,13 @@ function RecentLogs({ logs, clients, rent, updateLog, deleteLog }) {
   );
   if (recent.length === 0) return null;
 
-  const nameOf = (id) => (clients.find((c) => c.id === id) || {}).name || "No client";
+  /* An empty id means it was logged without a client, which is normal for a
+     walk-in. An id that no longer matches anyone means the client was removed,
+     and saying so is clearer than implying the service never had one. */
+  const nameOf = (id) => {
+    if (!id) return "No client";
+    return (clients.find((c) => c.id === id) || {}).name || "Removed client";
+  };
 
   const startEdit = (l) => {
     setOpen(l.id);
