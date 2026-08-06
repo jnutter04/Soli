@@ -115,10 +115,12 @@ export default function CsvImport({ clients, logs, onImport, onClose, money2 }) 
         </p>
 
         <input className="soli-input" type="file" accept=".csv,text/csv,text/plain"
+          aria-label="Choose an export file to import"
           onChange={(e) => readFile(e.target.files?.[0])} />
 
         <p className="soli-help">Or paste the contents:</p>
         <textarea className="soli-importta" rows={5} value={text}
+          aria-label="Paste the contents of your export"
           onChange={(e) => setText(e.target.value)}
           placeholder={"Date,Client,Service,Price,Duration\n2026-03-04,Maya R.,Volume fill,160,90"} />
 
@@ -170,31 +172,44 @@ export default function CsvImport({ clients, logs, onImport, onClose, money2 }) 
         </div>
       )}
 
+      {/* The grid has no visible column headers, so each cell carries its own
+          name. The row number goes in it because forty rows of "Price" with
+          nothing to tell them apart is no more use than none at all. */}
       <div className="soli-imptable">
-        {marked.map((r) => (
-          <div className={"soli-improw" + (r.duplicate ? " dupe" : "") + (!r.date ? " bad" : "")} key={r.id}>
-            <input type="checkbox" checked={r.include && !r.duplicate && !!r.date}
-              disabled={r.duplicate || !r.date}
-              onChange={(e) => upd(r.id, "include", e.target.checked)} />
-            <input className="soli-input slim" type="date"
-              value={r.date ? String(r.date).slice(0, 10) : ""}
-              onChange={(e) => upd(r.id, "date", e.target.value ? new Date(e.target.value + "T12:00:00").toISOString() : null)} />
-            <input className="soli-input slim" value={r.client} placeholder="No client"
-              onChange={(e) => upd(r.id, "client", e.target.value)} />
-            <input className="soli-input slim" value={r.service}
-              onChange={(e) => upd(r.id, "service", e.target.value)} />
-            <input className="soli-input slim" type="number" value={r.price} placeholder="0"
-              onChange={(e) => upd(r.id, "price", e.target.value)} />
-            <input className="soli-input slim" type="number" value={r.durationMin} placeholder="min"
-              onChange={(e) => upd(r.id, "durationMin", e.target.value)} />
-            <select className="soli-input slim" value={r.paySource}
-              onChange={(e) => upd(r.id, "paySource", e.target.value)}>
-              {SOURCE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-            {r.duplicate && <span className="soli-impnote">already in</span>}
-            {!r.date && <span className="soli-impnote">no date</span>}
-          </div>
-        ))}
+        {marked.map((r, i) => {
+          const row = `row ${i + 1}`;
+          return (
+            <div className={"soli-improw" + (r.duplicate ? " dupe" : "") + (!r.date ? " bad" : "")} key={r.id}>
+              <input type="checkbox" checked={r.include && !r.duplicate && !!r.date}
+                disabled={r.duplicate || !r.date}
+                aria-label={`Import ${row}`}
+                onChange={(e) => upd(r.id, "include", e.target.checked)} />
+              <input className="soli-input slim" type="date"
+                aria-label={`Date, ${row}`}
+                value={r.date ? String(r.date).slice(0, 10) : ""}
+                onChange={(e) => upd(r.id, "date", e.target.value ? new Date(e.target.value + "T12:00:00").toISOString() : null)} />
+              <input className="soli-input slim" value={r.client} placeholder="No client"
+                aria-label={`Client, ${row}`}
+                onChange={(e) => upd(r.id, "client", e.target.value)} />
+              <input className="soli-input slim" value={r.service}
+                aria-label={`Service, ${row}`}
+                onChange={(e) => upd(r.id, "service", e.target.value)} />
+              <input className="soli-input slim" type="number" value={r.price} placeholder="0"
+                aria-label={`Price, ${row}`}
+                onChange={(e) => upd(r.id, "price", e.target.value)} />
+              <input className="soli-input slim" type="number" value={r.durationMin} placeholder="min"
+                aria-label={`Minutes, ${row}`}
+                onChange={(e) => upd(r.id, "durationMin", e.target.value)} />
+              <select className="soli-input slim" value={r.paySource}
+                aria-label={`Paid by, ${row}`}
+                onChange={(e) => upd(r.id, "paySource", e.target.value)}>
+                {SOURCE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              {r.duplicate && <span className="soli-impnote">already in</span>}
+              {!r.date && <span className="soli-impnote">no date</span>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="soli-refactions" style={{ marginTop: 12 }}>

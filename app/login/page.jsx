@@ -117,14 +117,14 @@ export default function LoginPage() {
         </>)}
 
         <form onSubmit={mode === "forgot" ? sendReset : submit}>
-          <label className="lg-label">Email</label>
-          <input className="lg-input" type="email" autoComplete="email" required
+          <label className="lg-label" htmlFor="lg-email">Email</label>
+          <input className="lg-input" id="lg-email" type="email" autoComplete="email" required
             value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
 
           {mode !== "forgot" && (
             <>
-              <label className="lg-label">Password</label>
-              <input className="lg-input" type="password"
+              <label className="lg-label" htmlFor="lg-password">Password</label>
+              <input className="lg-input" id="lg-password" type="password"
                 autoComplete={mode === "signup" ? "new-password" : "current-password"} required
                 minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder={mode === "signup" ? "At least 6 characters" : "Your password"} />

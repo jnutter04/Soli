@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useId, Children, isValidElement, cloneElement } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, PlusCircle, Users, Package, Settings as SettingsIcon,
@@ -1143,7 +1143,7 @@ function GoalCard({ goal, stats, savePlan, plan }) {
         </div>
         {editing ? (
           <div className="soli-goaledit">
-            <input className="soli-input" type="number" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+            <input className="soli-input" type="number" autoFocus aria-label="Monthly take-home goal" value={draft} onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }} placeholder="3000" />
             <button className="soli-cta sm" onClick={save}>Save</button>
           </div>
@@ -1161,7 +1161,7 @@ function GoalCard({ goal, stats, savePlan, plan }) {
         <span className="soli-goallabel">{stats.monthLabel} goal</span>
         {editing ? (
           <div className="soli-goaledit">
-            <input className="soli-input" type="number" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+            <input className="soli-input" type="number" autoFocus aria-label="Monthly take-home goal" value={draft} onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
             <button className="soli-cta sm" onClick={save}>Save</button>
           </div>
@@ -1656,22 +1656,22 @@ function BatchDay({ clients, saveClients, logs, saveLogs, templates, products, r
         <div className="soli-batchrow" key={r.id}>
           <div className="soli-batchnum">{i + 1}</div>
           <div className="soli-batchfields">
-            <select className="soli-input slim" value={r.clientId} onChange={(e) => set(r.id, { clientId: e.target.value })} disabled={!!r.newClient}>
+            <select className="soli-input slim" aria-label={`Client, service ${i + 1}`} value={r.clientId} onChange={(e) => set(r.id, { clientId: e.target.value })} disabled={!!r.newClient}>
               <option value="">No client</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <input className="soli-input slim" placeholder="or new name" value={r.newClient} onChange={(e) => set(r.id, { newClient: e.target.value })} />
+            <input className="soli-input slim" placeholder="or new name" aria-label={`New client name, service ${i + 1}`} value={r.newClient} onChange={(e) => set(r.id, { newClient: e.target.value })} />
             {templates.length > 0 && (
-              <select className="soli-input slim" defaultValue="" onChange={(e) => applyTpl(r.id, e.target.value)}>
+              <select className="soli-input slim" defaultValue="" aria-label={`Saved service, service ${i + 1}`} onChange={(e) => applyTpl(r.id, e.target.value)}>
                 <option value="">Saved service…</option>
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
-            <input className="soli-input slim" placeholder="Service" value={r.service} onChange={(e) => set(r.id, { service: e.target.value })} />
-            <input className="soli-input slim" type="number" placeholder={CUR} value={r.price} onChange={(e) => set(r.id, { price: e.target.value })} />
-            <input className="soli-input slim" type="number" placeholder="min" value={r.dur} onChange={(e) => set(r.id, { dur: e.target.value })} />
-            <input className="soli-input slim" type="number" placeholder="tip" value={r.tip} onChange={(e) => set(r.id, { tip: e.target.value })} />
-            <select className="soli-input slim" value={r.paySource} onChange={(e) => set(r.id, { paySource: e.target.value })}>
+            <input className="soli-input slim" placeholder="Service" aria-label={`Service name, service ${i + 1}`} value={r.service} onChange={(e) => set(r.id, { service: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder={CUR} aria-label={`Price, service ${i + 1}`} value={r.price} onChange={(e) => set(r.id, { price: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder="min" aria-label={`Minutes, service ${i + 1}`} value={r.dur} onChange={(e) => set(r.id, { dur: e.target.value })} />
+            <input className="soli-input slim" type="number" placeholder="tip" aria-label={`Tip, service ${i + 1}`} value={r.tip} onChange={(e) => set(r.id, { tip: e.target.value })} />
+            <select className="soli-input slim" aria-label={`Paid by, service ${i + 1}`} value={r.paySource} onChange={(e) => set(r.id, { paySource: e.target.value })}>
               {SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
@@ -1696,8 +1696,41 @@ function BatchDay({ clients, saveClients, logs, saveLogs, templates, products, r
   );
 }
 
+/* A labelled control.
+
+   The label used to be a bare <label> with nothing tying it to the input
+   beside it, which to a screen reader is a stray word followed by an unnamed
+   box. Ties are made here rather than by hand at every call site, so a new
+   field cannot be added without one.
+
+   Two shapes come through: a single control, and a group of them (segmented
+   buttons, a row of inputs). Only the first can carry htmlFor, since there is
+   nothing single for the label to point at in the second. */
+const LABELABLE = new Set(["input", "select", "textarea"]);
+
 function Field({ label, children }) {
-  return (<div className="soli-field"><label className="soli-label">{label}</label>{children}</div>);
+  const id = useId();
+  const only = Children.count(children) === 1 ? Children.toArray(children)[0] : null;
+
+  if (isValidElement(only) && LABELABLE.has(only.type)) {
+    // A control that brought its own id keeps it, so anything already pointing
+    // at that id still resolves.
+    const controlId = only.props.id || id;
+    return (
+      <div className="soli-field">
+        <label className="soli-label" htmlFor={controlId}>{label}</label>
+        {only.props.id ? only : cloneElement(only, { id })}
+      </div>
+    );
+  }
+
+  // A group is named as a whole, so the controls inside are read in context.
+  return (
+    <div className="soli-field" role="group" aria-labelledby={id}>
+      <span className="soli-label" id={id}>{label}</span>
+      {children}
+    </div>
+  );
 }
 
 /* ------------------------------ PLANNER ---------------------------------- */
@@ -1773,6 +1806,7 @@ function PriceSimulator({ logs, rent, taxRate }) {
               </div>
               <div className="soli-simctrl">
                 <input className="soli-input slim" type="number" inputMode="decimal"
+                  aria-label={`New price for ${s.name}`}
                   value={prices[s.name] ?? round2(s.avgPrice)}
                   onChange={(e) => setPrices((p) => ({ ...p, [s.name]: e.target.value }))} />
                 <button type="button" className="soli-simbump" onClick={() => bump(s, 10)}>+10%</button>
@@ -2010,6 +2044,7 @@ function ClientsView({ clients, logs, saveClients, saveLogs, rent }) {
           <input
             className="soli-input"
             type="search"
+            aria-label="Search clients"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, phone or note"
@@ -2197,12 +2232,13 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
           const s = stockFor(p, logs);
           return (
           <div className="soli-invrow" key={p.id}>
-            <input className="soli-input slim" value={p.name} onChange={e => upd(p.id, "name", e.target.value)} />
-            <input className="soli-input slim" type="number" value={p.cost} onChange={e => upd(p.id, "cost", e.target.value)} />
-            <input className="soli-input slim" type="number" placeholder="opt" value={p.amount || ""} onChange={e => upd(p.id, "amount", e.target.value)} />
-            <input className="soli-input slim" value={p.unit} onChange={e => upd(p.id, "unit", e.target.value)} />
+            <input className="soli-input slim" aria-label="Product name" value={p.name} onChange={e => upd(p.id, "name", e.target.value)} />
+            <input className="soli-input slim" type="number" aria-label={`Total cost for ${p.name || "this product"}`} value={p.cost} onChange={e => upd(p.id, "cost", e.target.value)} />
+            <input className="soli-input slim" type="number" placeholder="opt" aria-label={`Amount for ${p.name || "this product"}`} value={p.amount || ""} onChange={e => upd(p.id, "amount", e.target.value)} />
+            <input className="soli-input slim" aria-label={`Unit for ${p.name || "this product"}`} value={p.unit} onChange={e => upd(p.id, "unit", e.target.value)} />
             {stockEdit === p.id ? (
               <input className="soli-input slim" type="number" autoFocus placeholder={`How much now`}
+                aria-label={`Stock on hand for ${p.name || "this product"}`}
                 value={stockDraft} onChange={(e) => setStockDraft(e.target.value)}
                 onBlur={() => setOnHand(p.id, stockDraft)}
                 onKeyDown={(e) => { if (e.key === "Enter") setOnHand(p.id, stockDraft); if (e.key === "Escape") { setStockEdit(null); setStockDraft(""); } }} />
@@ -2213,7 +2249,7 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
                 {s ? `${round2(s.remaining)} ${p.unit}` : "Track"}
               </button>
             )}
-            <select className="soli-input slim" value={p.specialty || ""} onChange={e => upd(p.id, "specialty", e.target.value)}>
+            <select className="soli-input slim" aria-label={`Specialty for ${p.name || "this product"}`} value={p.specialty || ""} onChange={e => upd(p.id, "specialty", e.target.value)}>
               <option value="">Everyone</option>
               {SPECIALTIES.map(s2 => <option key={s2.key} value={s2.key}>{s2.label}</option>)}
             </select>
@@ -2225,12 +2261,12 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
       <div className="soli-addbox">
         <div className="soli-addhead">Add a product</div>
         <div className="soli-row4">
-          <input className="soli-input" placeholder="Product name" value={name} onChange={e => setName(e.target.value)} />
-          <input className="soli-input" type="number" placeholder={`Total cost ${CUR}`} value={cost} onChange={e => setCost(e.target.value)} />
-          <input className="soli-input" type="number" placeholder="Amount (optional)" value={amount} onChange={e => setAmount(e.target.value)} />
-          <input className="soli-input" placeholder="Unit (g/ml/use)" value={unit} onChange={e => setUnit(e.target.value)} />
+          <input className="soli-input" placeholder="Product name" aria-label="New product name" value={name} onChange={e => setName(e.target.value)} />
+          <input className="soli-input" type="number" placeholder={`Total cost ${CUR}`} aria-label="New product total cost" value={cost} onChange={e => setCost(e.target.value)} />
+          <input className="soli-input" type="number" placeholder="Amount (optional)" aria-label="New product amount" value={amount} onChange={e => setAmount(e.target.value)} />
+          <input className="soli-input" placeholder="Unit (g/ml/use)" aria-label="New product unit" value={unit} onChange={e => setUnit(e.target.value)} />
         </div>
-        <select className="soli-input" style={{ marginTop: 10 }} value={prodSpec} onChange={e => setProdSpec(e.target.value)}>
+        <select className="soli-input" style={{ marginTop: 10 }} aria-label="Who this product is for" value={prodSpec} onChange={e => setProdSpec(e.target.value)}>
           <option value="">For everyone</option>
           {SPECIALTIES.map(s => <option key={s.key} value={s.key}>For {s.label}</option>)}
         </select>
@@ -2330,7 +2366,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
             <p className="soli-help">Keep your numbers, tax jar, and profit tracking going after your trial. Cancel anytime.</p>
             <PlanPicker onSubscribe={onSubscribe} busy={billingBusy} />
             <div className="soli-promo" style={{ marginTop: 10 }}>
-              <input className="soli-input" placeholder="Promo code" value={pcode} onChange={e => { setPcode(e.target.value); setPerr(""); }} onKeyDown={e => { if (e.key === "Enter" && pcode.trim()) doRedeem(); }} />
+              <input className="soli-input" placeholder="Promo code" aria-label="Promo code" value={pcode} onChange={e => { setPcode(e.target.value); setPerr(""); }} onKeyDown={e => { if (e.key === "Enter" && pcode.trim()) doRedeem(); }} />
               <button className="soli-ghost" onClick={doRedeem} disabled={predeeming || !pcode.trim()}>{predeeming ? "Checking…" : "Redeem"}</button>
             </div>
             {perr && <p className="soli-help" style={{ color: "var(--clay-d)" }}>{perr}</p>}
@@ -2400,8 +2436,8 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <p className="soli-help" style={{ marginTop: 0 }}>Optional buckets to remind yourself to set aside part of what you keep. These are your own suggestions, not financial advice. Amounts show on your dashboard.</p>
         {buckets.map(b => (
           <div className="soli-bucketrow" key={b.id}>
-            <input className="soli-input slim" value={b.name} onChange={e => updBucket(b.id, "name", e.target.value)} />
-            <div className="soli-bucketpct"><input className="soli-input slim" type="number" value={b.pct} onChange={e => updBucket(b.id, "pct", e.target.value)} /><span>%</span></div>
+            <input className="soli-input slim" aria-label="Set-aside name" value={b.name} onChange={e => updBucket(b.id, "name", e.target.value)} />
+            <div className="soli-bucketpct"><input className="soli-input slim" type="number" aria-label={`Percentage for ${b.name || "this set-aside"}`} value={b.pct} onChange={e => updBucket(b.id, "pct", e.target.value)} /><span>%</span></div>
             <button className="soli-iconbtn" onClick={() => delBucket(b.id)}><Trash2 size={15} /></button>
           </div>
         ))}
@@ -2732,12 +2768,12 @@ function ExpensesView({ expenses, saveExpenses, ready }) {
       <div className="soli-addbox" style={{ marginBottom: 20 }}>
         <div className="soli-addhead">Add an expense</div>
         <div className="soli-exprow">
-          <input className="soli-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <select className="soli-input" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <input className="soli-input" type="date" aria-label="Expense date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <select className="soli-input" aria-label="Expense category" value={category} onChange={(e) => setCategory(e.target.value)}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <input className="soli-input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-          <input className="soli-input" type="number" inputMode="decimal" placeholder={`Amount ${CUR}`} value={amount}
+          <input className="soli-input" placeholder="Note (optional)" aria-label="Expense note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="soli-input" type="number" inputMode="decimal" placeholder={`Amount ${CUR}`} aria-label="Expense amount" value={amount}
             onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
         </div>
         <button className="soli-cta sm" onClick={add} disabled={!Number(amount)}>Add expense</button>
@@ -2752,13 +2788,13 @@ function ExpensesView({ expenses, saveExpenses, ready }) {
             <div className="soli-exprowline" key={e.id}>
               {editing === e.id ? (
                 <>
-                  <input className="soli-input slim" type="date" value={new Date(e.date).toISOString().slice(0, 10)}
+                  <input className="soli-input slim" type="date" aria-label="Date for this expense" value={new Date(e.date).toISOString().slice(0, 10)}
                     onChange={(ev) => upd(e.id, "date", new Date(ev.target.value + "T12:00:00").toISOString())} />
-                  <select className="soli-input slim" value={e.category} onChange={(ev) => upd(e.id, "category", ev.target.value)}>
+                  <select className="soli-input slim" aria-label="Category for this expense" value={e.category} onChange={(ev) => upd(e.id, "category", ev.target.value)}>
                     {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <input className="soli-input slim" value={e.note || ""} onChange={(ev) => upd(e.id, "note", ev.target.value)} />
-                  <input className="soli-input slim" type="number" value={e.amount} onChange={(ev) => upd(e.id, "amount", ev.target.value)} />
+                  <input className="soli-input slim" aria-label="Note for this expense" value={e.note || ""} onChange={(ev) => upd(e.id, "note", ev.target.value)} />
+                  <input className="soli-input slim" type="number" aria-label="Amount for this expense" value={e.amount} onChange={(ev) => upd(e.id, "amount", ev.target.value)} />
                   <button className="soli-editbtn" onClick={() => setEditing(null)}>Done</button>
                 </>
               ) : (
@@ -3055,7 +3091,7 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
         A year of your numbers, ready to hand to an accountant. Tips are counted as income here, even though they stay out of the per-service profit comparisons.
       </p>
 
-      <select className="soli-input" style={{ marginBottom: 12 }} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+      <select className="soli-input" style={{ marginBottom: 12 }} aria-label="Tax year" value={year} onChange={(e) => setYear(Number(e.target.value))}>
         {years.map((y) => <option key={y} value={y}>{y}</option>)}
       </select>
 
@@ -3214,7 +3250,7 @@ function Paywall({ email, onSubscribe, onSignOut, busy, onRedeem }) {
           <button className="soli-linkbtn" style={{ marginTop: 2 }} onClick={() => setShowCode(true)}>Have a promo code?</button>
         ) : (
           <div className="soli-promo">
-            <input className="soli-input" placeholder="Enter your code" value={code} onChange={e => { setCode(e.target.value); setErr(""); }} onKeyDown={e => { if (e.key === "Enter" && code.trim()) redeem(); }} />
+            <input className="soli-input" placeholder="Enter your code" aria-label="Promo code" value={code} onChange={e => { setCode(e.target.value); setErr(""); }} onKeyDown={e => { if (e.key === "Enter" && code.trim()) redeem(); }} />
             <button className="soli-ghost" onClick={redeem} disabled={redeeming || !code.trim()}>{redeeming ? "Checking…" : "Redeem"}</button>
           </div>
         )}

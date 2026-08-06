@@ -80,8 +80,8 @@ export default function ResetPasswordPage() {
             <h1 className="rp-h1">Set a new password</h1>
             <p className="rp-sub">Choose a new password for your account.</p>
             <form onSubmit={submit}>
-              <label className="rp-label">New password</label>
-              <input className="rp-input" type="password" autoComplete="new-password" required minLength={6}
+              <label className="rp-label" htmlFor="rp-password">New password</label>
+              <input className="rp-input" id="rp-password" type="password" autoComplete="new-password" required minLength={6}
                 value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
               {error && <div className="rp-error">{error}</div>}
               <button className="rp-btn" type="submit" disabled={busy}>{busy ? "Saving…" : "Save new password"}</button>
