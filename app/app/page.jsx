@@ -14,6 +14,7 @@ import { DialogProvider, useDialog } from "@/components/Dialog";
 import { mergeLists } from "@/lib/backup";
 import DataRestore from "@/components/DataRestore";
 import WorkLess from "@/components/WorkLess";
+import TaxPacket from "@/components/TaxPacket";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -2513,7 +2514,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
           </div>
         )}
 
-        <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
+        <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} email={email} />
 
         <DataExport settings={settings} clients={clients} products={products} logs={logs} plan={plan} expenses={expenses} />
         <DataRestore clients={clients} products={products} logs={logs} expenses={expenses} onRestore={onRestore} />
@@ -3000,7 +3001,8 @@ const dateFromInput = (s) => {
 };
 const round2 = (n) => Math.round(n * 100) / 100;
 
-function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
+function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [], email }) {
+  const [showPacket, setShowPacket] = useState(false);
   const years = useMemo(() => {
     const set = new Set([
       ...(logs || []).map((l) => new Date(l.date).getFullYear()),
@@ -3098,7 +3100,10 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
       [],
       ["DEDUCTIONS (from your entries)"],
       ["Product used on clients", round2(t.product)],
+      // Known categories first, then anything logged under a name no longer in
+      // the list, so the itemised rows always add up to the total below.
       ...EXPENSE_CATEGORIES.filter((c) => t.byCat[c]).map((c) => [c, round2(t.byCat[c])]),
+      ...Object.keys(t.byCat).filter((c) => t.byCat[c] && !EXPENSE_CATEGORIES.includes(c)).map((c) => [c, round2(t.byCat[c])]),
       ...(t.rentLogged ? [] : [["Booth time allocated to services", round2(t.boothCounted)]]),
       ["Total deductions", round2(t.deductions)],
       [],
@@ -3113,7 +3118,15 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
       t.rentLogged
         ? ["Note", `Booth rent uses the ${money2(t.byCat[RENT_CATEGORY])} actually logged as an expense. The hourly booth-time allocation used for per-service pricing (${money2(t.booth)}) is excluded here so the same cost is not deducted twice.`]
         : ["Note", `No booth rent was logged as an expense, so booth time is estimated as hours worked times the hourly rate in Settings (${money2(t.booth)}). If you pay rent, log the actual amounts under Expenses for a more accurate figure.`],
-      ["Note", "Only costs you have entered are included. Anything not logged, such as mileage or insurance, is missing from this summary."],
+      /* Naming the categories with nothing against them beats a vague warning:
+         mileage and insurance are things Soli does track, so listing them as
+         untracked was both wrong and no help in spotting a real omission. */
+      ["Note", (() => {
+        const empty = EXPENSE_CATEGORIES.filter((c) => !t.byCat[c]);
+        if (!empty.length) return "Only costs you have entered are included. Anything paid for but never logged is missing from this summary.";
+        const list = empty.length === 1 ? empty[0] : empty.slice(0, -1).join(", ") + " or " + empty[empty.length - 1];
+        return `Only costs you have entered are included. Nothing was logged this year under ${list}, so if you had costs of that kind they are missing from this summary.`;
+      })()],
     ];
     download(`soli-tax-summary-${year}.csv`, toCsv(out));
   };
@@ -3143,9 +3156,19 @@ function TaxExport({ logs, clients, settings, rent, taxRate, expenses = [] }) {
       )}
 
       <div className="soli-refactions" style={{ marginTop: 12 }}>
-        <button className="soli-cta sm" onClick={exportSummary}>Download summary</button>
-        <button className="soli-ghost" onClick={exportServices}>Download services</button>
+        <button className="soli-cta sm" onClick={() => setShowPacket(true)}>One page summary</button>
+        <button className="soli-ghost" onClick={exportSummary}>Summary spreadsheet</button>
+        <button className="soli-ghost" onClick={exportServices}>Every service</button>
       </div>
+
+      {showPacket && (
+        <TaxPacket
+          year={year} totals={t} serviceCount={rows.length} expenseCount={expRows.length}
+          taxRate={taxRate} currency={cur} email={email}
+          categories={EXPENSE_CATEGORIES} rentCategory={RENT_CATEGORY}
+          money2={money2} onClose={() => setShowPacket(false)}
+        />
+      )}
 
       <p className="soli-help">
         Prepared from what you entered, so it is only as accurate as your logs. It is not tax advice or a filed return. Booth time is your hours times your hourly rate. If you pay flat rent, give your accountant the amount actually paid. Costs Soli does not track, like supplies, mileage or insurance, are not included.
@@ -3830,6 +3853,44 @@ function Styles() {
 .soli-trialbar.ending button{color:var(--clay-d)}
 /* Deeper than the billing bars so unsaved work is never mistaken for a
    payment notice, which is easy to put off until later. */
+/* Rendered outside .soli-root, so it carries its own colours. Always paper
+   white, in both themes: this is a document, and a dark one prints as a black
+   rectangle or as nothing at all depending on the browser. */
+.soli-packetwrap{position:fixed;inset:0;z-index:80;background:rgba(43,33,24,.5);overflow-y:auto;padding:16px;
+  font-family:var(--font-hanken),system-ui,sans-serif;-webkit-overflow-scrolling:touch}
+.soli-packetbar{display:flex;gap:10px;justify-content:flex-end;max-width:760px;margin:0 auto 12px}
+.soli-packetbar button{width:auto;display:inline-flex;align-items:center;gap:7px;flex:none}
+.soli-packet{max-width:760px;margin:0 auto 24px;background:#fff;color:#1c1c1c;border-radius:10px;padding:40px 44px;box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.soli-pkhead{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #1c1c1c;padding-bottom:14px}
+.soli-pkbrand{font-family:var(--font-fraunces),serif;font-size:15px;font-weight:600;letter-spacing:.02em;color:#6b6b6b}
+.soli-pkhead h1{font-family:var(--font-fraunces),serif;font-size:27px;font-weight:600;margin:2px 0 0;letter-spacing:-.4px}
+.soli-pkyear{font-family:var(--font-fraunces),serif;font-size:40px;font-weight:600;line-height:1;color:#1c1c1c}
+.soli-pkmeta{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;color:#5c5c5c;margin:12px 0 26px}
+.soli-packet section{margin-bottom:24px;break-inside:avoid}
+.soli-packet h2{font-family:var(--font-fraunces),serif;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:#6b6b6b;margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid #d8d8d8}
+.soli-pkrow{display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:6px 0;font-size:14px}
+.soli-pkrow b{font-variant-numeric:tabular-nums;font-weight:600}
+.soli-pkrow.total{border-top:1px solid #1c1c1c;margin-top:5px;padding-top:9px;font-weight:600}
+.soli-pkrow.total b{font-family:var(--font-fraunces),serif;font-size:17px}
+.soli-pknotes p{font-size:11.5px;line-height:1.55;color:#4a4a4a;margin:0 0 7px}
+
+@media (max-width:560px){
+  .soli-packetwrap{padding:10px}
+  .soli-packet{padding:24px 20px}
+  .soli-pkyear{font-size:30px}
+  .soli-pkhead h1{font-size:20px}
+  .soli-pkmeta{flex-direction:column;gap:3px;margin-bottom:20px}
+}
+@media print{
+  /* Only the document goes on the paper. */
+  body>*{display:none!important}
+  body>.soli-packetwrap{display:block!important;position:static;padding:0;background:none;overflow:visible}
+  .soli-packetbar{display:none!important}
+  .soli-packet{max-width:none;margin:0;padding:0;border-radius:0;box-shadow:none}
+  .soli-pknotes{break-inside:avoid}
+}
+@page{margin:16mm}
+
 .soli-wlhead{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:14px;line-height:1.5;margin-bottom:14px}
 .soli-wltable{border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .soli-wlhrow,.soli-wlrow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 13px;text-align:left}
