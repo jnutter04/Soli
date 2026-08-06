@@ -815,8 +815,10 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
   const month = logs.filter(l => new Date(l.date).getTime() >= startMs);
   const totals = month.reduce((a, l) => {
     const { booth, profit } = profitOf(l, rent);
-    a.rev += l.price; a.prod += l.productCost; a.booth += booth; a.profit += profit; a.tips += (Number(l.tip) || 0); return a;
-  }, { rev: 0, prod: 0, booth: 0, profit: 0, tips: 0 });
+    a.rev += l.price; a.prod += l.productCost; a.booth += booth; a.profit += profit; a.tips += (Number(l.tip) || 0);
+    a.mins += Number(l.durationMin) || 0; return a;
+  }, { rev: 0, prod: 0, booth: 0, profit: 0, tips: 0, mins: 0 });
+  const totalHours = totals.mins / 60;
   const setAside = totals.profit * t;
   const takeHome = totals.profit - setAside;
   const totalTips = totals.tips;
@@ -925,7 +927,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
         <div className="soli-empty">
           <span className="soli-emptymark"><Sun size={26} strokeWidth={1.8} /></span>
           <h2>No services logged yet</h2>
-          <p>Log your first service and Soli shows your real take-home, after product, booth rent &amp; taxes. Everything here is built from your own numbers.</p>
+          <p>Log your first service and Soli shows what you actually keep, after product, booth rent &amp; tax. Everything here is built from your own numbers.</p>
           <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log your first service</button>
         </div>
         <p className="soli-emptyhint">Just exploring? You can load a sample data set from <b>Settings</b> to see how it all works, then clear it anytime.</p>
@@ -948,9 +950,9 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
       {/* take-home hero */}
       <div className="soli-hero">
         <div className="soli-heroblock">
-          <span className="soli-herolabel"><Wallet size={14} /> {totalTips > 0 ? "Take-home + tips" : "Your real take-home"}</span>
+          <span className="soli-herolabel"><Wallet size={14} /> What you kept</span>
           <span className="soli-heroval">{money2(pocketed)}</span>
-          <span className="soli-herosub">{totalTips > 0 ? `${money2(takeHome)} kept + ${money2(totalTips)} in tips` : "after product, booth rent & taxes"}</span>
+          <span className="soli-herosub">after product, booth rent &amp; tax{totalTips > 0 ? ", tips included" : ""}</span>
           {hasPrev && (
             <span className={"soli-herodelta " + (trendDiff >= 0 ? "up" : "down")}>
               {trendDiff >= 0 ? "▲" : "▼"} {trendPct != null ? `${Math.abs(trendPct)}%` : money2(Math.abs(trendDiff))} vs previous {rollDays} days
@@ -984,17 +986,52 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
         statRight={{ label: "Per hour", value: money2(rated.length ? rated[0].perHour : 0) }}
       />
 
-      <div className="soli-cards">
-        <Stat label="Revenue" value={money2(totals.rev)} tone="neutral" />
-        <Stat label="Product" value={"– " + money2(totals.prod)} tone="cost" />
-        <Stat label="Booth time" value={"– " + money2(totals.booth)} tone="cost" />
-        <Stat label="Pre-tax profit" value={money2(totals.profit)} tone="profit" />
-      </div>
+      {/* Four separate totals used to sit here: revenue, product, booth time and
+          pre-tax profit. Each was true, none said how it related to the big
+          number above, and pre-tax profit was visibly larger than it, which
+          invites the only question that matters: which one is my money?
+
+          One chain instead. Every line is a step from what came in to what is
+          left, so the figures read as one story rather than four claims. */}
+      <section className="soli-chain">
+        <div className="soli-chainhead">How that adds up</div>
+
+        <div className="soli-chainrow">
+          <span>Money in from services</span><b>{money2(totals.rev)}</b>
+        </div>
+        <div className="soli-chainrow out">
+          <span>Product used on clients</span><b>{"− " + money2(totals.prod)}</b>
+        </div>
+        <div className="soli-chainrow out">
+          {/* Spelling out the sum removes the usual objection, that this is not
+              a bill anyone actually paid. It is chair time priced at their own
+              rate, and saying so is the difference between a figure someone
+              trusts and one they argue with. */}
+          <span>Booth rent{rent > 0
+            ? ` (${round2(totalHours)}h at ${money2(rent)}/hr)`
+            : " (not set yet)"}</span>
+          <b>{"− " + money2(totals.booth)}</b>
+        </div>
+        <div className="soli-chainrow sub">
+          <span>Before tax</span><b>{money2(totals.profit)}</b>
+        </div>
+        <div className="soli-chainrow out">
+          <span>Tax to set aside ({taxRate}%)</span><b>{"− " + money2(setAside)}</b>
+        </div>
+        {totalTips > 0 && (
+          <div className="soli-chainrow in">
+            <span>Tips</span><b>{"+ " + money2(totalTips)}</b>
+          </div>
+        )}
+        <div className="soli-chainrow total">
+          <span>What you kept</span><b>{money2(pocketed)}</b>
+        </div>
+      </section>
 
       {/* take-home by month (the year view) */}
       <section className="soli-block">
-        <div className="soli-blockhead"><TrendingUp size={18} strokeWidth={1.9} /><h2>Take-home by month</h2></div>
-        <p className="soli-note">Your monthly take-home (profit after tax, plus tips) over the last 12 months. Tap or hover a bar for the amount.</p>
+        <div className="soli-blockhead"><TrendingUp size={18} strokeWidth={1.9} /><h2>What you kept, by month</h2></div>
+        <p className="soli-note">What you kept each month, on the same basis as the figure above. Tap or hover a bar for the amount.</p>
         <div className="soli-monthchart">
           {byMonth.map((mo, i) => (
             <div className="soli-monthcol" key={i} title={`${mo.label}: ${money2(mo.val)}`}>
@@ -1039,7 +1076,7 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
       {/* profit per hour */}
       <section className="soli-block">
         <div className="soli-blockhead"><TrendingUp size={18} strokeWidth={1.9} /><h2>Most profitable services, per hour</h2></div>
-        <p className="soli-note">Based on service price only. Tips are excluded here so the ranking stays fair, and counted in your take-home above.</p>
+        <p className="soli-note">Based on service price only. Tips are excluded here so the ranking stays fair, and counted in what you kept above.</p>
         <div className="soli-bars">
           {byService.map(s => (
             <div className="soli-barrow" key={s.name}>
@@ -1090,7 +1127,7 @@ function onboardingSteps({ settings, templates, logs }) {
       key: "rent",
       done: rentSet,
       title: "Set your booth rent and tax rate",
-      why: "Every take-home figure is built on these, so Soli's numbers are only yours once they are set.",
+      why: "Every figure is built on these, so what Soli says you kept is only yours once they are set.",
       cta: "Open Settings",
       tab: "settings",
     },
@@ -1106,7 +1143,7 @@ function onboardingSteps({ settings, templates, logs }) {
       key: "log",
       done: logs.length > 0,
       title: "Log your first service",
-      why: "This is where your real take-home appears. It takes about twenty seconds.",
+      why: "This is where what you actually keep appears. It takes about twenty seconds.",
       cta: "Log a service",
       tab: "log",
     },
@@ -3940,6 +3977,26 @@ function Styles() {
   .soli-pknotes{break-inside:avoid}
 }
 @page{margin:16mm}
+
+/* Reads as one sum being worked through, not four cards sitting together.
+   Tabular figures so the column lines up and the arithmetic can be followed
+   down the page, which is the whole point of showing it. */
+.soli-chain{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:22px}
+.soli-chainhead{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:10px}
+.soli-chainrow{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:7px 0;font-size:14px;color:var(--ink)}
+.soli-chainrow b{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.soli-chainrow.out b{color:var(--cost)}
+.soli-chainrow.in b{color:var(--profit)}
+/* The two resting points in the sum. A rule above each says "this is where the
+   line so far lands", which is what turns a list into a calculation. */
+.soli-chainrow.sub{border-top:1px solid var(--line);margin-top:4px;padding-top:11px;font-weight:600}
+.soli-chainrow.total{border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;font-weight:600}
+.soli-chainrow.total span{font-weight:600}
+.soli-chainrow.total b{font-family:var(--font-fraunces),serif;font-size:20px;color:var(--profit)}
+@media(max-width:420px){
+  .soli-chain{padding:14px 15px}
+  .soli-chainrow{font-size:13.5px}
+}
 
 .soli-wlhead{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:14px;line-height:1.5;margin-bottom:14px}
 .soli-wltable{border:1px solid var(--line);border-radius:12px;overflow:hidden}
