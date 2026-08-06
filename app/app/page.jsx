@@ -2408,6 +2408,14 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         {email && <p className="soli-help">Signed in as {email}</p>}
       </div>
 
+      {/* The settings that decide every figure in the app. They used to float
+          between the billing card and a notifications card with no heading of
+          their own, which left the most consequential controls in Soli looking
+          like leftovers. */}
+      <div className="soli-datatools">
+        <div className="soli-datahead">How your numbers are worked out</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>These three shape every take-home figure Soli shows you.</p>
+
       <Field label="Your specialty">
         <select className="soli-input" value={settings.specialty || ""} onChange={e => saveSettings({ ...settings, specialty: e.target.value })}>
           <option value="">Not set (show all products)</option>
@@ -2428,16 +2436,21 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         </p>
       </Field>
       <Field label="Booth rent">
-        <div className="soli-seg">
+        <div className="soli-seg three">
           {[["hour", "Per hour"], ["week", "Per week"], ["month", "Per month"]].map(([k, lbl]) => (
             <button key={k} type="button" className={"soli-segbtn" + (bUnit === k ? " on" : "")} onClick={() => setBooth({ boothRentUnit: k })}>{lbl}</button>
           ))}
         </div>
+        {/* Placeholders vanish once these are filled, leaving two bare numbers
+            that look alike. The group carries the "Booth rent" name, so each
+            input says which of the two it is. */}
         <input className="soli-input" type="number" style={{ marginTop: 10 }} placeholder={`Amount (${curSymbol(settings.currency)})`}
+          aria-label={bUnit === "hour" ? "Booth rent per hour" : `Booth rent amount per ${bUnit}`}
           value={bUnit === "hour" ? (settings.boothRentAmount ?? settings.boothRentHourly ?? "") : (settings.boothRentAmount ?? "")}
           onChange={e => setBooth({ boothRentAmount: e.target.value })} />
         {bUnit !== "hour" && (
           <input className="soli-input" type="number" placeholder="Hours you work per week"
+            aria-label="Hours you work per week"
             value={settings.boothRentHoursPerWeek || ""} onChange={e => setBooth({ boothRentHoursPerWeek: e.target.value })} />
         )}
         <p className="soli-help">
@@ -2448,25 +2461,26 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
               : "Enter the amount and your hours per week, and Soli converts it to an hourly rate for profit math.")}
         </p>
       </Field>
-      <Field label="Tax set-aside (%)">
-        <input className="soli-input" type="number" value={settings.taxRate}
-          onChange={e => saveSettings({ ...settings, taxRate: Number(e.target.value) })} />
-        <p className="soli-help">Self-employed? 25 to 30% is a safe starting point (income plus about 15.3% self-employment tax). Ask a tax pro for your exact number.</p>
-      </Field>
-      <Field label="Weekly recap email">
-        <label className="soli-toggle">
-          <input type="checkbox" checked={settings.weeklyRecap !== false} onChange={e => saveSettings({ ...settings, weeklyRecap: e.target.checked })} />
-          <span>Email me a short summary of what I kept each week.</span>
-        </label>
-      </Field>
+      </div>
 
-      <PushToggle />
-
-      <ReferralPanel />
-
+      {/* Tax and the savings buckets are the same idea, a share of what you
+          keep held back before you spend it, and they used to sit four blocks
+          apart. Together now, but not levelled: the tax rate drives Soli's
+          arithmetic and the buckets are only reminders, so each says which it
+          is rather than leaving the tax rate looking optional. */}
       <div className="soli-datatools">
-        <div className="soli-datahead">Savings set-asides</div>
-        <p className="soli-help" style={{ marginTop: 0 }}>Optional buckets to remind yourself to set aside part of what you keep. These are your own suggestions, not financial advice. Amounts show on your dashboard.</p>
+        <div className="soli-datahead">What you set aside</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Money held back out of what you keep, so it is spoken for before you spend it.</p>
+
+        <Field label="Tax set-aside (%)">
+          <input className="soli-input" type="number" value={settings.taxRate}
+            onChange={e => saveSettings({ ...settings, taxRate: Number(e.target.value) })} />
+          <p className="soli-help">Self-employed? 25 to 30% is a safe starting point (income plus about 15.3% self-employment tax). Ask a tax pro for your exact number. This one changes every take-home figure in Soli.</p>
+        </Field>
+
+        <div className="soli-subblock">
+          <div className="soli-subhead">Other set-asides</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Optional buckets to remind yourself to put part of what you keep aside. These are your own suggestions rather than financial advice, and unlike the tax rate above they do not change any of your figures. Amounts show on your dashboard.</p>
         {buckets.map(b => (
           <div className="soli-bucketrow" key={b.id}>
             <input className="soli-input slim" aria-label="Set-aside name" value={b.name} onChange={e => updBucket(b.id, "name", e.target.value)} />
@@ -2475,12 +2489,35 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
           </div>
         ))}
         <div className="soli-bucketadd">
-          {[["Taxes", 30], ["Retirement", 10], ["Own business", 20], ["Vacation", 10]].map(([n, p]) => (
+          {/* No Taxes preset: the tax set-aside sits directly above, and two
+              different tax percentages in one block is a question, not a feature. */}
+          {[["Retirement", 10], ["Own business", 20], ["Vacation", 10], ["Slow season", 10]].map(([n, p]) => (
             <button key={n} type="button" className="soli-tradebtn" onClick={() => addBucket(n, p)}>+ {n} {p}%</button>
           ))}
           <button type="button" className="soli-tradebtn" onClick={() => addBucket("Savings", 10)}>+ Custom</button>
         </div>
+        </div>
       </div>
+
+      {/* The weekly email and push notifications are one job. They were a bare
+          toggle sitting directly above a card called "Notifications", which
+          read as two unrelated things that happened to touch. */}
+      <div className="soli-datatools">
+        <div className="soli-datahead">How Soli reaches you</div>
+        <p className="soli-help" style={{ marginTop: 0 }}>Soli gets in touch only when there is something worth saying.</p>
+
+        <div className="soli-subblock">
+          <div className="soli-subhead">Weekly recap email</div>
+          <label className="soli-toggle">
+            <input type="checkbox" checked={settings.weeklyRecap !== false} onChange={e => saveSettings({ ...settings, weeklyRecap: e.target.checked })} />
+            <span>Email me a short summary of what I kept each week.</span>
+          </label>
+        </div>
+
+        <PushToggle />
+      </div>
+
+      <ReferralPanel />
 
       <div className="soli-datatools">
         <div className="soli-datahead">Your data</div>
@@ -3443,6 +3480,10 @@ function Styles() {
 
 .soli-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 @media(max-width:540px){.soli-seg{grid-template-columns:repeat(2,1fr)}}
+/* Two columns suits the four payment sources, which pair up neatly. Three
+   options split 2 and 1 instead, leaving a stray button on its own row, and
+   these labels are short enough to sit three across on any phone. */
+.soli-seg.three{grid-template-columns:repeat(3,1fr)}
 .soli-segbtn{font-family:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:10px;padding:10px 6px;cursor:pointer;transition:.12s}
 .soli-segbtn:hover{border-color:var(--clay)}
 .soli-segbtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -3671,6 +3712,15 @@ function Styles() {
 .soli-emptyhint{margin-top:16px;font-size:12.5px;color:var(--ink2);text-align:center;line-height:1.5}
 
 .soli-datatools{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+/* Fields carry their own bottom margin for the stacked layout they were built
+   for. Inside a section the flex gap already spaces them, and both together
+   left the grouped settings looking further apart than the groups. */
+.soli-datatools .soli-field{margin-bottom:0}
+.soli-datatools .soli-field .soli-help:last-child{margin-bottom:0}
+/* A sub-section straight after the section's opening line needs less air than
+   one following a control: the flex gap, the margin and the padding stacked up
+   and pushed the first divider away from the text it belongs to. */
+.soli-datatools>p+.soli-subblock{margin-top:2px;padding-top:14px}
 .soli-sliprow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #EDD8C8}
 .soli-sliprow:first-of-type{border-top:none}
 [data-theme="dark"] .soli-sliprow{border-top-color:#3f3025}

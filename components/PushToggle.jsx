@@ -102,11 +102,16 @@ export default function PushToggle() {
     setBusy(false);
   };
 
+  /* Renders as a section inside the caller's block rather than as a block of
+     its own: push and the weekly email are both "how Soli reaches you", and
+     sitting them next to each other under one heading stopped them reading as
+     two unrelated features. Returns nothing where push is unavailable, so the
+     surrounding block still shows the email option on its own. */
   if (!supported) return null;
 
   return (
-    <div className="soli-datatools">
-      <div className="soli-datahead">Notifications</div>
+    <div className="soli-subblock">
+      <div className="soli-subhead">Push notifications</div>
       <p className="soli-help" style={{ marginTop: 0 }}>
         An occasional nudge when a regular is drifting, or when it has been a while since you logged anything. Nothing is sent when there is nothing to say.
       </p>
