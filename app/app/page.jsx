@@ -13,6 +13,7 @@ import InstallPrompt from "@/components/InstallPrompt";
 import { DialogProvider, useDialog } from "@/components/Dialog";
 import { mergeLists } from "@/lib/backup";
 import DataRestore from "@/components/DataRestore";
+import WorkLess from "@/components/WorkLess";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -783,7 +784,7 @@ function SoliApp() {
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
           templates={templates} saveTemplates={saveTemplates} specialty={settings.specialty}
           updateLog={updateLog} deleteLog={deleteLog} />}
-        {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} logs={logs} boothRate={rent} />}
+        {tab === "plan" && <Planner plan={plan} savePlan={savePlan} taxRate={taxRate} logs={logs} boothRate={rent} settings={settings} />}
         {tab === "clients" && <ClientsView clients={clients} logs={logs} saveClients={saveClients} saveLogs={saveLogs} rent={rent} />}
         {tab === "inv" && <Inventory products={products} saveProducts={saveProducts} specialty={settings.specialty} logs={logs} />}
         {tab === "exp" && <ExpensesView expenses={expenses} saveExpenses={saveExpenses} ready={expensesReady} />}
@@ -1877,7 +1878,7 @@ function PriceSimulator({ logs, rent, taxRate }) {
 /* boothRate is the hourly chair cost used in profit math. It is deliberately
    not called rent here, since this screen already uses `rent` for the monthly
    booth rent the user is planning around. */
-function Planner({ plan, savePlan, taxRate, logs = [], boothRate = 0 }) {
+function Planner({ plan, savePlan, taxRate, logs = [], boothRate = 0, settings = {} }) {
   const set = (k, v) => savePlan({ ...plan, [k]: Math.max(0, Number(v) || 0) });
   const t = taxRate / 100;
   const goal = plan.goal, rent = plan.monthlyRent, avg = plan.avgPrice, cap = plan.capacity;
@@ -1921,6 +1922,7 @@ function Planner({ plan, savePlan, taxRate, logs = [], boothRate = 0 }) {
       </div>
 
       <PriceSimulator logs={logs} rent={boothRate} taxRate={taxRate} />
+      <WorkLess logs={logs} rent={boothRate} taxRate={taxRate} settings={settings} money2={money2} />
     </div>
   );
 }
@@ -3828,6 +3830,25 @@ function Styles() {
 .soli-trialbar.ending button{color:var(--clay-d)}
 /* Deeper than the billing bars so unsaved work is never mistaken for a
    payment notice, which is easy to put off until later. */
+.soli-wlhead{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:14px;line-height:1.5;margin-bottom:14px}
+.soli-wltable{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.soli-wlhrow,.soli-wlrow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 13px;text-align:left}
+.soli-wlhrow{background:var(--surface2);font-size:11.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.soli-wlhrow span:not(:first-child),.soli-wlrow span:not(:first-child){min-width:76px;text-align:right}
+.soli-wlrow{width:100%;border:none;border-top:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:inherit;font-size:13.5px;cursor:pointer;transition:.15s}
+.soli-wlrow:hover{background:var(--surface2)}
+/* Struck through rather than hidden, so the row stays where it was and the
+   choice can be taken back without hunting for it. */
+.soli-wlrow.off{background:var(--surface2);color:var(--ink2);text-decoration:line-through;text-decoration-thickness:1px}
+.soli-wlname{display:flex;flex-direction:column;font-weight:600;text-decoration:inherit}
+.soli-wlname small{font-size:11px;font-weight:400;color:var(--ink2);text-decoration:none}
+.soli-wlrate{font-family:var(--font-fraunces),serif;font-weight:600;color:var(--sage-d)}
+.soli-wlrow.off .soli-wlrate{color:var(--ink2)}
+.soli-wlresult{margin-top:14px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+.soli-wlresrow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13.5px;padding:3px 0}
+.soli-wlresrow b{font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600;color:var(--profit)}
+.soli-wlresrow b.cost{color:var(--cost)}
+.soli-wlresnote{font-size:12.5px;color:var(--ink2);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
 .soli-restoregrid{margin:8px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .soli-restorehead,.soli-restorerow{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:9px 13px}
 .soli-restorehead{background:var(--surface2);font-size:11.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
