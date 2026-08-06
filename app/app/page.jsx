@@ -11,6 +11,8 @@ import CsvImport from "@/components/CsvImport";
 import PushToggle from "@/components/PushToggle";
 import InstallPrompt from "@/components/InstallPrompt";
 import { DialogProvider, useDialog } from "@/components/Dialog";
+import { mergeLists } from "@/lib/backup";
+import DataRestore from "@/components/DataRestore";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -550,6 +552,34 @@ function SoliApp() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [pendingFields.length]);
 
+  /* Writes a backup back into the account.
+
+     Each list goes through the ordinary save path rather than straight to the
+     table, so a restore merges across devices, retries, and shows up in the
+     unsaved banner exactly like any other edit. Restoring a year of work is the
+     worst possible moment to discover a save quietly failed.
+
+     Merge deliberately leaves settings and plan alone. They are live
+     configuration rather than records, and silently reverting someone's tax
+     rate while they thought they were recovering deleted services would be a
+     nasty surprise. Replace takes the lot, which is what it says on the tin. */
+  const restoreAll = (data, mode) => {
+    if (mode === "replace") {
+      saveClients(data.clients);
+      saveProducts(data.products);
+      saveLogs(data.logs);
+      saveExpenses(data.expenses);
+      if (data.settings) saveSettings(data.settings);
+      if (data.plan) savePlan(data.plan);
+      return;
+    }
+    const merged = mergeLists({ clients, products, logs, expenses }, data);
+    saveClients(merged.clients);
+    saveProducts(merged.products);
+    saveLogs(merged.logs);
+    saveExpenses(merged.expenses);
+  };
+
   // Service templates live inside the settings blob (no schema change needed).
   const templates = settings.templates || [];
   const saveTemplates = (v) => saveSettings({ ...settings, templates: v });
@@ -760,7 +790,7 @@ function SoliApp() {
         {tab === "settings" && <SettingsView settings={settings} saveSettings={saveSettings} loadSample={loadSample} clearAll={clearAll}
           isSubscribed={isSubscribed} inTrial={inTrial} trialDaysLeft={trialDaysLeft} onSubscribe={goCheckout} onManage={goPortal} billingBusy={billingBusy} email={email}
           comped={comped} onRedeem={redeemCode}
-          logs={logs} clients={clients} rent={rent} expenses={expenses} products={products} plan={plan} onDeleteAccount={deleteAccount} onImportServices={importServices} />}
+          logs={logs} clients={clients} rent={rent} expenses={expenses} products={products} plan={plan} onDeleteAccount={deleteAccount} onRestore={restoreAll} onImportServices={importServices} />}
       </main>
       <footer className="soli-appfoot">
         Have feedback or a feature request?{" "}
@@ -2277,7 +2307,7 @@ function Inventory({ products, saveProducts, specialty, logs = [] }) {
 }
 
 /* ------------------------------- SETTINGS -------------------------------- */
-function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount, onImportServices }) {
+function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscribed, inTrial, trialDaysLeft, onSubscribe, onManage, billingBusy, email, comped, onRedeem, logs = [], clients = [], rent = 0, expenses = [], products = [], plan = {}, onDeleteAccount, onImportServices, onRestore }) {
   const { ask } = useDialog();
   const [delOpen, setDelOpen] = useState(false);
   const [delConfirm, setDelConfirm] = useState("");
@@ -2484,6 +2514,7 @@ function SettingsView({ settings, saveSettings, loadSample, clearAll, isSubscrib
         <TaxExport logs={logs} clients={clients} settings={settings} rent={rent} taxRate={settings.taxRate} expenses={expenses} />
 
         <DataExport settings={settings} clients={clients} products={products} logs={logs} plan={plan} expenses={expenses} />
+        <DataRestore clients={clients} products={products} logs={logs} expenses={expenses} onRestore={onRestore} />
 
         <div className="soli-subblock">
           <div className="soli-subhead">Start over</div>
@@ -2893,13 +2924,14 @@ function DataExport({ settings, clients, products, logs, plan, expenses }) {
           <button className="soli-ghost" style={{ marginTop: 6 }} onClick={exportAll}>Full backup file</button>
           {note && <p className="soli-help">{note}</p>}
           <p className="soli-help">
-            The backup is a JSON file: it holds every field Soli stores so nothing is lost, but it is meant for safekeeping rather than reading. Soli cannot load one back in yet, so treat it as a copy rather than a restore.
+            The backup is a JSON file: it holds every field Soli stores so nothing is lost, but it is meant for safekeeping rather than reading. You can load one back in below.
           </p>
         </>
       )}
     </div>
   );
 }
+
 
 /* ----------------------------- TAX EXPORT -------------------------------- */
 /* Note on tips: profitOf deliberately excludes them so services can be compared
@@ -3796,6 +3828,13 @@ function Styles() {
 .soli-trialbar.ending button{color:var(--clay-d)}
 /* Deeper than the billing bars so unsaved work is never mistaken for a
    payment notice, which is easy to put off until later. */
+.soli-restoregrid{margin:8px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.soli-restorehead,.soli-restorerow{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:9px 13px}
+.soli-restorehead{background:var(--surface2);font-size:11.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.soli-restorehead span:not(:first-child),.soli-restorerow span:not(:first-child){min-width:58px;text-align:right}
+.soli-restorerow{font-size:13.5px;border-top:1px solid var(--line)}
+.soli-restorerow span:first-child{font-weight:600}
+.soli-restorerow span:last-child{font-family:var(--font-fraunces),serif;font-weight:600;color:var(--clay-d)}
 .soli-trialbar.unsaved{background:linear-gradient(150deg,#8F3B2E,#6F2C22)}
 .soli-trialbar.unsaved button{color:#8F3B2E}
 .soli-trialbar.grace button{color:var(--clay-d)}
