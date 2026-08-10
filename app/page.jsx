@@ -1,5 +1,6 @@
 import Link from "next/link";
 import RefCapture from "@/components/RefCapture";
+import StickyCta from "@/components/StickyCta";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
 
 /* Structured data so search engines can describe Soli accurately in results.
@@ -54,6 +55,7 @@ export default function Landing() {
       />
       <LandingStyles />
       <RefCapture />
+      <StickyCta />
 
       {/* NAV */}
       <header className="lp-nav">
@@ -85,9 +87,12 @@ export default function Landing() {
             <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
           </div>
           <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away.</p>
+          {/* Shorter than it reads elsewhere on purpose. At full length these
+              wrapped two and one on a phone, leaving the last reassurance
+              stranded on its own line right at the fold. */}
           <div className="lp-trust">
-            <span><Check /> No card required</span>
-            <span><Check /> Works on any device</span>
+            <span><Check /> No card</span>
+            <span><Check /> Any device</span>
             <span><Check /> Cancel anytime</span>
           </div>
         </div>
@@ -277,6 +282,24 @@ function LandingStyles() {
 .lp-cta.light{background:#fff;color:var(--clay-d);box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .lp-ctanote{font-size:13px;color:var(--ink2);margin:-8px 0 18px;max-width:460px}
 .lp-trust{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px;color:var(--ink2)}
+
+/* Phones only. On a desktop the header is a short scroll away and a bar pinned
+   across the bottom of a wide window reads as an ad rather than a help. */
+.lp-sticky{position:fixed;left:0;right:0;bottom:0;z-index:60;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background:rgba(246,239,228,.94);backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);
+  transform:translateY(115%);transition:transform .24s ease;
+  pointer-events:none;visibility:hidden}
+.lp-sticky.on{transform:translateY(0);pointer-events:auto;visibility:visible}
+.lp-sticky-btn{display:block;text-align:center;background:var(--clay);color:#fff!important;
+  font-weight:600;font-size:16px;padding:14px;border-radius:13px;
+  box-shadow:0 6px 18px rgba(188,107,76,.28)}
+.lp-sticky-btn:hover{background:var(--clay-d)}
+@media(min-width:761px){.lp-sticky{display:none}}
+/* Respect a request for less motion: appear without the slide. */
+@media(prefers-reduced-motion:reduce){.lp-sticky{transition:none}}
+@media(max-width:430px){.lp-trust{gap:13px;font-size:12.5px}}
 .lp-trust span{display:inline-flex;align-items:center;gap:6px}
 .lp-trust svg{color:var(--sage-d)}
 
