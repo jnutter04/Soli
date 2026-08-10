@@ -64,7 +64,11 @@ export default function Landing() {
         <nav className="lp-navlinks">
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
-          <Link href="/app" className="lp-navcta">Open the app</Link>
+          {/* Signing in belongs to people who already have an account, so it
+              sits here as a link rather than as a second button competing with
+              the one action this page is for. */}
+          <Link href="/login" className="lp-navsignin">Sign in</Link>
+          <Link href="/app?demo=1" className="lp-navcta">Start free</Link>
         </nav>
       </header>
 
@@ -78,8 +82,7 @@ export default function Landing() {
             after product, booth rent, and the tax you should be setting aside. In about 20 seconds per client.
           </p>
           <div className="lp-cta-row">
-            <Link href="/app?demo=1" className="lp-cta">Start free with sample data →</Link>
-            <Link href="/login" className="lp-cta-ghost">Sign in</Link>
+            <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
           </div>
           <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away.</p>
           <div className="lp-trust">
@@ -89,22 +92,30 @@ export default function Landing() {
           </div>
         </div>
 
-        {/* Hero visual: a stylized take-home card */}
+        {/* Hero visual: the dashboard, in the words the dashboard actually uses.
+
+            This drifted once already. The app was rewritten to say "kept"
+            everywhere and this card kept advertising "take-home", so anyone
+            reading the page and then opening Soli met two names for one number,
+            which is the exact confusion the rewrite existed to remove. The rows
+            below add up on purpose: 7310 − 686 − 1824 − 1440 + 822.50. */}
         <div className="lp-herocard" aria-hidden="true">
           <div className="lp-hc-take">
-            <span className="lp-hc-label"><SunMark size={14} stroke={2} /> Your real take-home · last 30 days</span>
+            <span className="lp-hc-label"><SunMark size={14} stroke={2} /> What you kept · last 30 days</span>
             <span className="lp-hc-big">$4,182.50</span>
-            <span className="lp-hc-sub">after product, booth rent &amp; taxes</span>
+            <span className="lp-hc-sub">after product, booth rent &amp; tax, tips included</span>
           </div>
-          <div className="lp-hc-row"><span>Revenue billed</span><span>$7,310.00</span></div>
-          <div className="lp-hc-row cost"><span>– Product &amp; booth time</span><span>$1,338.00</span></div>
-          <div className="lp-hc-row cost"><span>– Tax jar (30%)</span><span>$1,789.50</span></div>
+          <div className="lp-hc-row"><span>Money in from services</span><span>$7,310.00</span></div>
+          <div className="lp-hc-row cost"><span>– Product used on clients</span><span>$686.00</span></div>
+          <div className="lp-hc-row cost"><span>– Booth rent (152h at $12/hr)</span><span>$1,824.00</span></div>
+          <div className="lp-hc-row cost"><span>– Tax to set aside (30%)</span><span>$1,440.00</span></div>
+          <div className="lp-hc-row gain"><span>+ Tips</span><span>$822.50</span></div>
           <div className="lp-hc-jar">
             <span><SunMark size={13} stroke={2} /> Set aside for taxes</span>
-            <span className="lp-hc-jarval">$1,789.50</span>
+            <span className="lp-hc-jarval">$1,440.00</span>
           </div>
           <div className="lp-hc-chart">
-            <div className="lp-hc-chartlabel">Take-home by month</div>
+            <div className="lp-hc-chartlabel">What you kept, by month</div>
             <div className="lp-hc-bars">
               {[40, 34, 52, 47, 63, 58, 74, 69, 88].map((h, i) => (
                 <span key={i} className="lp-hc-bar" style={{ height: h + "%" }} />
@@ -131,14 +142,14 @@ export default function Landing() {
       <section className="lp-features" id="features">
         <h2 className="lp-h2 center">Everything points at one question: what's left for you?</h2>
         <div className="lp-grid">
-          <Feature title="Real take-home, instantly"
+          <Feature title="What you kept, instantly"
             body="Log a service and Soli does the profit, booth-rent, and tax math for you, so you always know what's actually yours." />
           <Feature title="A tax jar that saves you"
             body="Every service sets aside a percentage automatically. No more April panic, no more spending money that was never yours." />
           <Feature title="Profit per hour, ranked"
             body="See which services actually pay, and which quietly cost you. Stop guessing which work to chase." />
           <Feature title="What should I charge?"
-            body="Work backward from the take-home you want. Soli tells you the price and the number of clients to hit it." />
+            body="Work backward from what you want to keep. Soli tells you the price and the number of clients to hit it." />
           <Feature title="Clients ranked by real worth"
             body="Lifetime profit per client, not just visit count. Know exactly who's worth rebooking." />
           <Feature title="Rebooking reminders"
@@ -151,7 +162,7 @@ export default function Landing() {
         <h2 className="lp-h2 center">Three taps. Then the truth.</h2>
         <div className="lp-steps">
           <Step n="1" title="Log a service" body="Price, time in the chair, products used, and how they paid. About 20 seconds." />
-          <Step n="2" title="See your numbers" body="Take-home, tax set-aside, profit per hour, and your most valuable clients, all done for you." />
+          <Step n="2" title="See your numbers" body="What you kept, tax set-aside, profit per hour, and your most valuable clients, all done for you." />
           <Step n="3" title="Keep more" body="Raise the right prices, drop the thin earners, and rebook the clients that matter." />
         </div>
       </section>
@@ -161,7 +172,7 @@ export default function Landing() {
         <h2 className="lp-h2 center">Built for the chair, not the spreadsheet</h2>
         <div className="lp-quote-grid">
           <div className="lp-quote">
-            <div className="lp-qtitle">Your real take-home</div>
+            <div className="lp-qtitle">What you actually keep</div>
             <p className="lp-qbody">"A good month" means nothing until product, booth rent, and taxes come out. Soli does that math on every service, automatically.</p>
           </div>
           <div className="lp-quote">
@@ -198,8 +209,8 @@ export default function Landing() {
         <div className="lp-final-inner">
           <span className="lp-logomark big"><SunMark size={26} stroke={1.8} color="#fff" /></span>
           <h2 className="lp-h2 center light">See what you actually keep.</h2>
-          <p className="lp-final-p">Free to start. Nothing to install. Your first real take-home number is 20 seconds away.</p>
-          <Link href="/app" className="lp-cta light">Open Soli →</Link>
+          <p className="lp-final-p">Free to start. Nothing to install. Your first real number is 20 seconds away.</p>
+          <Link href="/app?demo=1" className="lp-cta light">Start free →</Link>
         </div>
       </section>
 
@@ -211,7 +222,7 @@ export default function Landing() {
         <span className="lp-foot-tag">Know what you actually keep.</span>
         <Link href="/privacy" className="lp-foot-link">Privacy</Link>
         <Link href="/terms" className="lp-foot-link">Terms</Link>
-        <Link href="/app" className="lp-foot-link">Open the app →</Link>
+        <Link href="/app?demo=1" className="lp-foot-link">Start free →</Link>
       </footer>
     </div>
   );
@@ -259,7 +270,11 @@ function LandingStyles() {
 .lp-navlinks a:hover{color:var(--ink)}
 .lp-navcta{background:var(--ink);color:var(--bg)!important;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px}
 .lp-navcta:hover{background:#000}
-@media(max-width:620px){.lp-navlinks a:not(.lp-navcta){display:none}}
+.lp-navsignin{font-weight:600;color:var(--ink)}
+@media(max-width:620px){
+  .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin){display:none}
+  .lp-navlinks{gap:16px;font-size:14px}
+}
 
 /* hero */
 .lp-hero{max-width:1080px;margin:0 auto;padding:46px 26px 70px;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center}
@@ -275,8 +290,6 @@ function LandingStyles() {
 .lp-cta{background:var(--clay);color:#fff;font-weight:600;font-size:16px;padding:15px 26px;border-radius:13px;box-shadow:0 8px 20px rgba(188,107,76,.30);transition:.15s}
 .lp-cta:hover{background:var(--clay-d);transform:translateY(-1px)}
 .lp-cta.light{background:#fff;color:var(--clay-d);box-shadow:0 8px 24px rgba(0,0,0,.18)}
-.lp-cta-ghost{font-weight:600;font-size:16px;padding:15px 22px;border-radius:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:.15s}
-.lp-cta-ghost:hover{border-color:var(--clay)}
 .lp-ctanote{font-size:13px;color:var(--ink2);margin:-8px 0 18px;max-width:460px}
 .lp-trust{display:flex;flex-wrap:wrap;gap:18px;font-size:13.5px;color:var(--ink2)}
 .lp-trust span{display:inline-flex;align-items:center;gap:6px}
@@ -290,6 +303,7 @@ function LandingStyles() {
 .lp-hc-sub{font-size:12px;opacity:.82;margin-top:7px}
 .lp-hc-row{display:flex;justify-content:space-between;font-size:14px;color:var(--ink2);padding:8px 4px;border-bottom:1px solid var(--line)}
 .lp-hc-row.cost{color:var(--cost)}
+.lp-hc-row.gain{color:var(--profit)}
 .lp-hc-jar{display:flex;justify-content:space-between;align-items:center;margin-top:14px;background:linear-gradient(150deg,#C9A24B,#A9863A);color:#fff;border-radius:13px;padding:13px 16px;font-size:13px}
 .lp-hc-jar span{display:inline-flex;align-items:center;gap:6px}
 .lp-hc-jarval{font-family:var(--font-fraunces),serif;font-size:18px;font-weight:600}
