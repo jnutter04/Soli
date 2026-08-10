@@ -78,8 +78,8 @@ export default function Landing() {
           <span className="lp-eyebrow">Profit-first tracking for beauty pros</span>
           <h1 className="lp-h1">Know what you<br /><span className="lp-underline">actually keep.</span></h1>
           <p className="lp-lead">
-            Your booking app shows what you <em>billed</em>. Soli shows what you <strong>earned</strong>:
-            after product, booth rent, and the tax you should be setting aside. In about 20 seconds per client.
+            Your booking app shows what you <em>billed</em>. Soli shows what you <strong>keep</strong>,
+            after product, booth rent and tax.
           </p>
           <div className="lp-cta-row">
             <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
@@ -140,7 +140,7 @@ export default function Landing() {
 
       {/* FEATURES */}
       <section className="lp-features" id="features">
-        <h2 className="lp-h2 center">Everything points at one question: what's left for you?</h2>
+        <h2 className="lp-h2 center">One question: what's left for you?</h2>
         <div className="lp-grid">
           <Feature title="What you kept, instantly"
             body="Log a service and Soli does the profit, booth-rent, and tax math for you, so you always know what's actually yours." />
@@ -150,10 +150,6 @@ export default function Landing() {
             body="See which services actually pay, and which quietly cost you. Stop guessing which work to chase." />
           <Feature title="What should I charge?"
             body="Work backward from what you want to keep. Soli tells you the price and the number of clients to hit it." />
-          <Feature title="Clients ranked by real worth"
-            body="Lifetime profit per client, not just visit count. Know exactly who's worth rebooking." />
-          <Feature title="Rebooking reminders"
-            body="See who's overdue before they drift to someone else. Retention is cheaper than acquisition." />
         </div>
       </section>
 
@@ -168,23 +164,6 @@ export default function Landing() {
       </section>
 
       {/* Honest value cards (real testimonials can replace these once collected) */}
-      <section className="lp-quotes">
-        <h2 className="lp-h2 center">Built for the chair, not the spreadsheet</h2>
-        <div className="lp-quote-grid">
-          <div className="lp-quote">
-            <div className="lp-qtitle">What you actually keep</div>
-            <p className="lp-qbody">"A good month" means nothing until product, booth rent, and taxes come out. Soli does that math on every service, automatically.</p>
-          </div>
-          <div className="lp-quote">
-            <div className="lp-qtitle">Every dollar counted</div>
-            <p className="lp-qbody">Cash, Venmo, and Zelle are real income your card-only reports ignore. Soli counts all of it, so your numbers are complete.</p>
-          </div>
-          <div className="lp-quote">
-            <div className="lp-qtitle">No more April surprises</div>
-            <p className="lp-qbody">A tax jar sets money aside from every service, so tax time is money you already saved, not a shock.</p>
-          </div>
-        </div>
-      </section>
 
       {/* TESTIMONIAL (real, from Jordan) */}
       <section className="lp-testi">
@@ -280,8 +259,14 @@ function LandingStyles() {
 .lp-hero{max-width:1080px;margin:0 auto;padding:46px 26px 70px;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center}
 @media(max-width:880px){.lp-hero{grid-template-columns:1fr;gap:40px;padding-top:30px}}
 .lp-eyebrow{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.4px;color:var(--clay-d);background:#F6E5DA;padding:6px 13px;border-radius:20px;margin-bottom:20px}
-.lp-h1{font-family:var(--font-fraunces),serif;font-weight:600;font-size:62px;line-height:1.02;letter-spacing:-1.5px;margin:0 0 22px}
+/* Without this the headline breaks as "Know what you / actually keep.",
+   leaving a two-letter word alone at the end of a line. Balance splits the
+   lines evenly instead, which is the whole reason the property exists. */
+.lp-h1{text-wrap:balance;font-family:var(--font-fraunces),serif;font-weight:600;font-size:62px;line-height:1.02;letter-spacing:-1.5px;margin:0 0 22px}
 @media(max-width:880px){.lp-h1{font-size:48px}}
+/* The line break above is deliberate, so the fix is size rather than
+   wrapping: at 48px the first line overflows a phone and breaks itself. */
+@media(max-width:430px){.lp-h1{font-size:40px;letter-spacing:-1px}}
 .lp-underline{color:var(--clay-d);position:relative;white-space:nowrap}
 .lp-underline:after{content:"";position:absolute;left:0;right:0;bottom:4px;height:10px;background:rgba(201,162,75,.35);border-radius:6px;z-index:-1}
 .lp-lead{font-size:19px;color:var(--ink2);max-width:520px;margin:0 0 30px}
@@ -329,8 +314,10 @@ function LandingStyles() {
 
 /* features */
 .lp-features{max-width:1080px;margin:0 auto;padding:80px 26px}
+@media(max-width:880px){.lp-features{padding:52px 22px}.lp-grid{margin-top:28px}}
 .lp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px}
 @media(max-width:880px){.lp-grid{grid-template-columns:1fr}}
+@media(max-width:880px){.lp-feat{padding:18px 16px}.lp-feat h3{font-size:17px}.lp-feat p{font-size:13.5px}}
 .lp-feat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px}
 .lp-feat-dot{width:34px;height:34px;border-radius:10px;background:#E4E8D6;color:var(--sage-d);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 .lp-feat h3{font-family:var(--font-fraunces),serif;font-size:19px;font-weight:600;margin:0 0 8px}
@@ -339,23 +326,15 @@ function LandingStyles() {
 /* how */
 .lp-how{max-width:1080px;margin:0 auto;padding:20px 26px 90px}
 .lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:44px}
-@media(max-width:880px){.lp-steps{grid-template-columns:1fr}}
+@media(max-width:880px){.lp-steps{grid-template-columns:1fr;gap:12px;margin-top:28px}}
 .lp-step{padding:8px 6px}
 .lp-step-n{width:40px;height:40px;border-radius:50%;background:var(--clay);color:#fff;font-family:var(--font-fraunces),serif;font-size:19px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
 .lp-step h3{font-family:var(--font-fraunces),serif;font-size:20px;font-weight:600;margin:0 0 8px}
 .lp-step p{font-size:15px;color:var(--ink2);margin:0;max-width:300px}
 
 /* quotes */
-.lp-quotes{background:var(--surface2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:80px 26px}
-.lp-quote-grid{max-width:1080px;margin:44px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-@media(max-width:880px){.lp-quote-grid{grid-template-columns:1fr}}
-.lp-quote{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px;margin:0}
-.lp-quote blockquote{font-family:var(--font-fraunces),serif;font-size:18px;line-height:1.45;margin:0 0 18px;color:var(--ink)}
-.lp-quote figcaption{display:flex;flex-direction:column;gap:2px}
 .lp-q-name{font-weight:600;font-size:13.5px;color:var(--clay-d)}
 .lp-q-role{font-size:12.5px;color:var(--ink2)}
-.lp-qtitle{font-family:var(--font-fraunces),serif;font-weight:600;font-size:19px;color:var(--clay-d);margin-bottom:10px}
-.lp-qbody{font-size:15px;line-height:1.5;color:var(--ink2);margin:0}
 .lp-testi{padding:20px 26px 50px}
 .lp-testi-inner{max-width:720px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:38px 44px 32px;text-align:center;box-shadow:0 20px 50px -30px rgba(43,33,24,.3)}
 .lp-testi-mark{font-family:var(--font-fraunces),serif;font-size:70px;line-height:.4;color:var(--clay);height:34px}
