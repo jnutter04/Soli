@@ -95,12 +95,24 @@ export function drawShareCard(canvas, { eyebrow, hero, clause, period, pill, sta
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   const MARGIN = 96, MAXW = W - MARGIN * 2;
 
-  // Brand, inside the safe area this time.
-  sunMark(ctx, W / 2 - 96, 372, 26, "#E8C77A");
-  ctx.fillStyle = CREAM;
+  /* Brand, inside the safe area this time, and measured rather than guessed.
+
+     Both halves used to be placed by hand at fixed offsets, which ignored the
+     fact that the sun's rays reach well past its circle: they extend to 2.25
+     times the radius, so the mark is 117px wide, not 52. The wordmark started
+     half a pixel inside that, and the two drew on top of each other. Laying
+     the lockup out from its real width keeps the gap honest at any size. */
+  const markR = 26;
+  const markW = markR * 2.25 * 2;
+  const markGap = 30;
   ctx.font = `600 74px ${SERIF}`;
+  const wordW = ctx.measureText("Soli").width;
+  const lockX = (W - (markW + markGap + wordW)) / 2;
+
+  sunMark(ctx, lockX + markW / 2, 372, markR, "#E8C77A");
+  ctx.fillStyle = CREAM;
   ctx.textAlign = "left";
-  ctx.fillText("Soli", W / 2 - 38, 376);
+  ctx.fillText("Soli", lockX + markW + markGap, 376);
   ctx.textAlign = "center";
 
   // Milestone badge, drawn only when something true was passed in.
