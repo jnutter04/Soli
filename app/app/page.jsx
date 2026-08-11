@@ -15,6 +15,7 @@ import { mergeLists } from "@/lib/backup";
 import DataRestore from "@/components/DataRestore";
 import WorkLess from "@/components/WorkLess";
 import TaxPacket from "@/components/TaxPacket";
+import { shouldOfferShare } from "@/lib/milestones";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -779,7 +780,8 @@ function SoliApp() {
           </div>
         )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} plan={plan} savePlan={savePlan}
-          settings={settings} templates={settings.templates || []} onHideOnboarding={() => saveSettings({ ...settings, hideOnboarding: true })} />}
+          settings={settings} templates={settings.templates || []} onHideOnboarding={() => saveSettings({ ...settings, hideOnboarding: true })}
+          onMilestoneSeen={(key) => saveSettings({ ...settings, sharePromptedFor: key })} />}
         {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
@@ -803,7 +805,7 @@ function SoliApp() {
 }
 
 /* ------------------------------ DASHBOARD -------------------------------- */
-function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan, settings = {}, templates = [], onHideOnboarding }) {
+function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan, settings = {}, templates = [], onHideOnboarding, onMilestoneSeen }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
@@ -860,6 +862,18 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
   }, { profit: 0, tips: 0 });
   const prevPocketed = prevAgg.profit * (1 - t) + prevAgg.tips;
   const trendDiff = pocketed - prevPocketed;
+
+  /* A record worth mentioning, checked rather than assumed, and offered once.
+     The share card used to be a button that sat on this page forever, which
+     asks somebody to decide for themselves that today is worth posting about.
+     Soli holds the numbers, so Soli can notice. */
+  const milestone = useMemo(
+    () => shouldOfferShare({
+      months: byMonth.map((mo) => ({ key: mo.key, value: mo.val })),
+      promptedFor: settings.sharePromptedFor,
+    }),
+    [byMonth, settings.sharePromptedFor]
+  );
   const trendPct = prevPocketed > 0 ? Math.round((trendDiff / prevPocketed) * 100) : null;
   const hasPrev = isRolling && prevMonth.length > 0;
   const svcDelta = month.length - prevMonth.length;
@@ -875,7 +889,8 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
     const out = []; const base = new Date();
     for (let i = 11; i >= 0; i--) {
       const dd = new Date(base.getFullYear(), base.getMonth() - i, 1);
-      out.push({ label: dd.toLocaleDateString(undefined, { month: "short" }), val: m[dd.getFullYear() + "-" + dd.getMonth()] || 0 });
+      const k = dd.getFullYear() + "-" + dd.getMonth();
+      out.push({ key: k, label: dd.toLocaleDateString(undefined, { month: "short" }), val: m[k] || 0 });
     }
     return out;
   }, [logs, rent, t]);
@@ -972,6 +987,21 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
 
       <GoalCard goal={goal} stats={goalStats} savePlan={savePlan} plan={plan} />
 
+      {milestone && (
+        <div className="soli-milestone">
+          <div>
+            <b>Best month you have logged.</b>
+            <span>{money(milestone.value)} kept, {money(milestone.beatBy)} more than your previous best.</span>
+          </div>
+          <div className="soli-milestoneacts">
+            <button className="soli-cta sm" onClick={() => setShareOpen(true)}>
+              <Share2 size={15} strokeWidth={1.9} /> Share it
+            </button>
+            <button className="soli-ghost sm" onClick={() => onMilestoneSeen?.(milestone.key)}>Not now</button>
+          </div>
+        </div>
+      )}
+
       {month.length > 0 && (
         <button className="soli-sharebtn" onClick={() => setShareOpen(true)}>
           <Share2 size={15} strokeWidth={1.9} /> Share this {range === "30d" ? "month" : "run"}
@@ -982,8 +1012,9 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
         onClose={() => setShareOpen(false)}
         amount={money2(pocketed)}
         period={rangeTitle}
+        milestone={milestone}
         statLeft={{ label: "Services", value: String(month.length) }}
-        statRight={{ label: "Per hour", value: money2(rated.length ? rated[0].perHour : 0) }}
+        statRight={{ label: "Kept per hour", value: totalHours > 0 ? money2(pocketed / totalHours) : "n/a" }}
       />
 
       {/* Four separate totals used to sit here: revenue, product, booth time and
@@ -3981,6 +4012,14 @@ function Styles() {
 /* Reads as one sum being worked through, not four cards sitting together.
    Tabular figures so the column lines up and the arithmetic can be followed
    down the page, which is the whole point of showing it. */
+.soli-milestone{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;
+  background:linear-gradient(150deg,#5E7142,#475431);color:#F4F0E4;border-radius:16px;padding:16px 18px;margin-bottom:20px}
+.soli-milestone b{display:block;font-family:var(--font-fraunces),serif;font-size:17px;font-weight:600;margin-bottom:3px}
+.soli-milestone span{font-size:13px;opacity:.85}
+.soli-milestoneacts{display:flex;gap:9px;flex:none}
+.soli-milestoneacts .soli-cta,.soli-milestoneacts .soli-ghost{width:auto;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.soli-milestoneacts .soli-ghost{background:transparent;border-color:rgba(244,240,228,.4);color:#F4F0E4}
+@media(max-width:520px){.soli-milestoneacts{width:100%}.soli-milestoneacts .soli-cta{flex:1}}
 .soli-chain{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:22px}
 .soli-chainhead{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);margin-bottom:10px}
 .soli-chainrow{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:7px 0;font-size:14px;color:var(--ink)}

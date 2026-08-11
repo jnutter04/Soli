@@ -34,14 +34,39 @@ function sunMark(ctx, cx, cy, r, color) {
   ctx.restore();
 }
 
-export function drawShareCard(canvas, { amount, label, period, showAmount, statLeft, statRight }) {
+/* Instagram paints its own interface over the top and bottom of a story:
+   the profile row and close button up top, the reply bar and share icons
+   below. Roughly 250px at each end of a 1080x1920 canvas is not yours.
+
+   The previous layout put the wordmark at y=210 and soli.beauty at y=1710,
+   which is to say it put the branding, and the whole reason a shared card is
+   worth drawing, underneath Instagram's furniture. Every share so far was
+   most likely posted with no visible attribution at all. */
+/* Shrinks text until it fits. Someone who keeps $12,480 should not have their
+   best month run off the side of the card. */
+function fitText(ctx, text, maxWidth, startPx, weight, family) {
+  let size = startPx;
+  ctx.font = `${weight} ${size}px ${family}`;
+  while (ctx.measureText(text).width > maxWidth && size > 40) {
+    size -= 4;
+    ctx.font = `${weight} ${size}px ${family}`;
+  }
+  return size;
+}
+
+// Letter spacing is not in every canvas implementation, so it is set defensively.
+function withTracking(ctx, px, draw) {
+  const had = "letterSpacing" in ctx;
+  const prev = had ? ctx.letterSpacing : null;
+  if (had) ctx.letterSpacing = `${px}px`;
+  draw();
+  if (had) ctx.letterSpacing = prev;
+}
+
+export function drawShareCard(canvas, { eyebrow, hero, clause, period, pill, statLeft, statRight }) {
   const ctx = canvas.getContext("2d");
   canvas.width = W; canvas.height = H;
 
-  /* The fonts are self-hosted under a generated family name, and a canvas
-     cannot read a CSS variable, so the real names are resolved off the document
-     here. Naming them literally would quietly fall back to a system face on the
-     one image people actually post in public. */
   const stack = (varName, fallback) => {
     try {
       const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
@@ -51,81 +76,101 @@ export function drawShareCard(canvas, { amount, label, period, showAmount, statL
   const SERIF = stack("--font-fraunces", "Georgia, serif");
   const SANS = stack("--font-hanken", "system-ui, sans-serif");
 
-  // Warm oat background with the brand's soft glows.
-  ctx.fillStyle = "#F6EFE4"; ctx.fillRect(0, 0, W, H);
-  let g = ctx.createRadialGradient(W * 0.15, 0, 0, W * 0.15, 0, W * 1.1);
-  g.addColorStop(0, "rgba(201,162,75,0.28)"); g.addColorStop(1, "rgba(246,239,228,0)");
+  const CREAM = "#F4F0E4", MUTED = "rgba(244,240,228,0.70)";
+
+  /* Full bleed rather than a small white card floating in beige. A story sits
+     in a feed of edge to edge photographs, and a receipt on a cream background
+     reads as an accident next to them. */
+  let g = ctx.createLinearGradient(0, 0, W * 0.6, H);
+  g.addColorStop(0, "#63764A"); g.addColorStop(1, "#39442A");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  g = ctx.createRadialGradient(W * 0.9, H * 0.15, 0, W * 0.9, H * 0.15, W);
-  g.addColorStop(0, "rgba(188,107,76,0.20)"); g.addColorStop(1, "rgba(246,239,228,0)");
+  // Warm light from the top corner, the same glow the app uses.
+  g = ctx.createRadialGradient(W * 0.82, H * 0.06, 0, W * 0.82, H * 0.06, W * 1.15);
+  g.addColorStop(0, "rgba(201,162,75,0.30)"); g.addColorStop(1, "rgba(201,162,75,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  g = ctx.createRadialGradient(W * 0.1, H * 0.92, 0, W * 0.1, H * 0.92, W);
+  g.addColorStop(0, "rgba(188,107,76,0.24)"); g.addColorStop(1, "rgba(188,107,76,0)");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-  // Brand lockup
-  sunMark(ctx, 150, 210, 26, "#BC6B4C");
-  ctx.fillStyle = "#2B2118";
-  ctx.font = `600 76px ${SERIF}`;
-  ctx.textAlign = "left"; ctx.textBaseline = "middle";
-  ctx.fillText("Soli", 218, 214);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const MARGIN = 96, MAXW = W - MARGIN * 2;
 
-  // Main card
-  const cx = 90, cy = 470, cw = W - 180, ch = 880;
-  ctx.save();
-  ctx.shadowColor = "rgba(43,33,24,0.16)"; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
-  ctx.fillStyle = "#FFFDF9"; roundRect(ctx, cx, cy, cw, ch, 56); ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = "#E7DBC8"; ctx.lineWidth = 2;
-  roundRect(ctx, cx, cy, cw, ch, 56); ctx.stroke();
-
-  // Green take-home block
-  const bx = cx + 56, by = cy + 64, bw = cw - 112, bh = 420;
-  const bg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
-  bg.addColorStop(0, "#5E7142"); bg.addColorStop(1, "#475431");
-  ctx.fillStyle = bg; roundRect(ctx, bx, by, bw, bh, 40); ctx.fill();
-
+  // Brand, inside the safe area this time.
+  sunMark(ctx, W / 2 - 96, 372, 26, "#E8C77A");
+  ctx.fillStyle = CREAM;
+  ctx.font = `600 74px ${SERIF}`;
+  ctx.textAlign = "left";
+  ctx.fillText("Soli", W / 2 - 38, 376);
   ctx.textAlign = "center";
-  ctx.fillStyle = "#D6DBC2";
-  ctx.font = `500 34px ${SANS}`;
-  ctx.fillText(label, W / 2, by + 78);
 
-  ctx.fillStyle = "#F4F0E4";
-  if (showAmount) {
-    ctx.font = `600 148px ${SERIF}`;
-    ctx.fillText(amount, W / 2, by + 210);
-  } else {
-    ctx.font = `600 104px ${SERIF}`;
-    ctx.fillText("My best month yet", W / 2, by + 190, bw - 60);
+  // Milestone badge, drawn only when something true was passed in.
+  if (pill) {
+    ctx.font = `600 34px ${SANS}`;
+    const pw = ctx.measureText(pill).width + 76, ph = 76;
+    const px = (W - pw) / 2, py = 604;
+    ctx.fillStyle = "rgba(232,199,122,0.20)";
+    roundRect(ctx, px, py, pw, ph, ph / 2); ctx.fill();
+    ctx.strokeStyle = "rgba(232,199,122,0.45)"; ctx.lineWidth = 2;
+    roundRect(ctx, px, py, pw, ph, ph / 2); ctx.stroke();
+    ctx.fillStyle = "#F0DCA8";
+    ctx.fillText(pill, W / 2, py + ph / 2 + 2);
   }
 
-  ctx.fillStyle = "rgba(244,240,228,0.78)";
-  ctx.font = `400 30px ${SANS}`;
-  ctx.fillText(period, W / 2, by + 330);
+  if (eyebrow) {
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 32px ${SANS}`;
+    withTracking(ctx, 4, () => ctx.fillText(eyebrow.toUpperCase(), W / 2, 790));
+  }
 
-  // Two supporting stats
-  const sy = by + bh + 110;
-  ctx.fillStyle = "#6E5E4C";
-  ctx.font = `500 30px ${SANS}`;
-  ctx.fillText(statLeft.label, cx + cw * 0.28, sy);
-  ctx.fillText(statRight.label, cx + cw * 0.72, sy);
-  ctx.fillStyle = "#2B2118";
-  ctx.font = `600 62px ${SERIF}`;
-  ctx.fillText(statLeft.value, cx + cw * 0.28, sy + 78);
-  ctx.fillText(statRight.value, cx + cw * 0.72, sy + 78);
+  // The number.
+  ctx.fillStyle = CREAM;
+  const heroSize = fitText(ctx, hero, MAXW, 208, 600, SERIF);
+  ctx.font = `600 ${heroSize}px ${SERIF}`;
+  ctx.fillText(hero, W / 2, 950);
 
-  // Honest framing so the number is not mistaken for revenue
-  ctx.fillStyle = "#9c8a72";
-  ctx.font = `400 26px ${SANS}`;
-  ctx.fillText("after product, booth rent & taxes", W / 2, cy + ch - 54);
+  /* The clause is the whole point and it used to be a 26px grey footnote.
+     Every other pro posts revenue; this posts what survived the costs, and
+     that difference is only legible if the difference is stated in a size a
+     person reads. */
+  if (clause) {
+    ctx.fillStyle = CREAM;
+    const cs = fitText(ctx, clause, MAXW, 48, 500, SANS);
+    ctx.font = `500 ${cs}px ${SANS}`;
+    ctx.fillText(clause, W / 2, 1124);
+  }
 
-  // Footer
-  ctx.fillStyle = "#A4583B";
+  if (period) {
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 32px ${SANS}`;
+    ctx.fillText(period, W / 2, 1224);
+  }
+
+  // Two supporting figures, both describing the person rather than a highlight.
+  const sy = 1352;
+  ctx.strokeStyle = "rgba(244,240,228,0.18)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(MARGIN + 40, sy - 60); ctx.lineTo(W - MARGIN - 40, sy - 60); ctx.stroke();
+
+  const cols = [[statLeft, W * 0.31], [statRight, W * 0.69]];
+  for (const [stat, x] of cols) {
+    if (!stat) continue;
+    ctx.fillStyle = MUTED;
+    ctx.font = `500 30px ${SANS}`;
+    ctx.fillText(stat.label, x, sy + 10);
+    ctx.fillStyle = CREAM;
+    ctx.font = `600 66px ${SERIF}`;
+    ctx.fillText(stat.value, x, sy + 88);
+  }
+
+  // Attribution, where it can actually be seen.
+  ctx.fillStyle = "#F0DCA8";
   ctx.font = `600 46px ${SERIF}`;
-  ctx.fillText("soli.beauty", W / 2, H - 210);
-  ctx.fillStyle = "#6E5E4C";
+  ctx.fillText("soli.beauty", W / 2, 1556);
+  ctx.fillStyle = MUTED;
   ctx.font = `400 30px ${SANS}`;
-  ctx.fillText("Know what you actually keep", W / 2, H - 150);
+  ctx.fillText("Know what you actually keep", W / 2, 1620);
 }
 
-export default function ShareCard({ open, onClose, amount, period, statLeft, statRight }) {
+export default function ShareCard({ open, onClose, amount, period, milestone, statLeft, statRight }) {
   const canvasRef = useRef(null);
   const [showAmount, setShowAmount] = useState(true);
   const [preview, setPreview] = useState("");
@@ -142,14 +187,31 @@ export default function ShareCard({ open, onClose, amount, period, statLeft, sta
     (async () => {
       try { await document.fonts.ready; } catch { /* fall back to system serif */ }
       if (cancelled || !canvasRef.current) return;
-      drawShareCard(canvasRef.current, {
-        amount, period, showAmount, statLeft, statRight,
-        label: showAmount ? "What I actually kept" : "",
-      });
+      /* The words are decided here and the drawing just lays them out, so a
+         claim can never appear because of a layout branch. Notably there is no
+         path that prints "best month" unless one was actually passed in. */
+      const copy = showAmount
+        ? {
+            eyebrow: "What I actually kept",
+            hero: amount,
+            clause: "after product, booth rent and tax",
+            pill: milestone ? "Best month yet" : null,
+            period,
+          }
+        : milestone
+        ? { eyebrow: null, hero: "Best month yet", clause: "after product, booth rent and tax", pill: null, period }
+        : {
+            eyebrow: "Services this month",
+            hero: statLeft?.value || "0",
+            clause: "every one costed for product, booth rent and tax",
+            pill: null,
+            period,
+          };
+      drawShareCard(canvasRef.current, { ...copy, statLeft, statRight });
       setPreview(canvasRef.current.toDataURL("image/png"));
     })();
     return () => { cancelled = true; };
-  }, [open, showAmount, amount, period, statLeft, statRight]);
+  }, [open, showAmount, amount, period, milestone, statLeft, statRight]);
 
   if (!open || !portalEl) return null;
 
