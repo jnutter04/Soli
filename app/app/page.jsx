@@ -863,17 +863,6 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
   const prevPocketed = prevAgg.profit * (1 - t) + prevAgg.tips;
   const trendDiff = pocketed - prevPocketed;
 
-  /* A record worth mentioning, checked rather than assumed, and offered once.
-     The share card used to be a button that sat on this page forever, which
-     asks somebody to decide for themselves that today is worth posting about.
-     Soli holds the numbers, so Soli can notice. */
-  const milestone = useMemo(
-    () => shouldOfferShare({
-      months: byMonth.map((mo) => ({ key: mo.key, value: mo.val })),
-      promptedFor: settings.sharePromptedFor,
-    }),
-    [byMonth, settings.sharePromptedFor]
-  );
   const trendPct = prevPocketed > 0 ? Math.round((trendDiff / prevPocketed) * 100) : null;
   const hasPrev = isRolling && prevMonth.length > 0;
   const svcDelta = month.length - prevMonth.length;
@@ -894,6 +883,18 @@ function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = 
     }
     return out;
   }, [logs, rent, t]);
+
+  /* A record worth mentioning, checked rather than assumed, and offered once.
+     Must come after byMonth: it reads it, and a const referenced above its own
+     declaration throws at render rather than at build, which is exactly how
+     this shipped broken the first time. */
+  const milestone = useMemo(
+    () => shouldOfferShare({
+      months: byMonth.map((mo) => ({ key: mo.key, value: mo.val })),
+      promptedFor: settings.sharePromptedFor,
+    }),
+    [byMonth, settings.sharePromptedFor]
+  );
   const maxMonth = Math.max(...byMonth.map(x => x.val), 1);
 
   // income by source
