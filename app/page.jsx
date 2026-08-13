@@ -1,6 +1,7 @@
 import Link from "next/link";
 import RefCapture from "@/components/RefCapture";
 import StickyCta from "@/components/StickyCta";
+import SunMark from "@/components/SunMark";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
 
 /* Structured data so search engines can describe Soli accurately in results.
@@ -25,17 +26,6 @@ const structuredData = {
     audienceType: "Estheticians, barbers, hair stylists and nail technicians",
   },
 };
-
-/* Reusable sun mark (matches the app + favicon) */
-function SunMark({ size = 20, stroke = 1.8, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"}
-      strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-    </svg>
-  );
-}
 
 function Check() {
   return (
@@ -65,7 +55,7 @@ export default function Landing() {
         </div>
         <nav className="lp-navlinks">
           <a href="#how">How it works</a>
-          <Link href="/calculator" className="lp-navcalc">Free calculator</Link>
+          <Link href="/calculator" className="lp-navcalc">Calculator</Link>
           {/* Signing in belongs to people who already have an account, so it
               sits here as a link rather than as a second button competing with
               the one action this page is for. */}
@@ -258,7 +248,7 @@ function LandingStyles() {
 .lp-navcalc{font-weight:600}
 .lp-inline{color:var(--clay-d);font-weight:600;text-decoration:underline}
 @media(max-width:620px){
-  .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin):not(.lp-navcalc){display:none}
+  .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin){display:none}
   .lp-navlinks{gap:16px;font-size:14px}
 }
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import KeepCalculator from "@/components/KeepCalculator";
+import SunMark from "@/components/SunMark";
 import { SITE_URL, SITE_NAME } from "@/lib/site";
 
 const title = "Booth rent calculator: what do you actually keep?";
@@ -63,7 +64,7 @@ export default function CalculatorPage() {
 
       <header className="kc-nav">
         <Link href="/" className="kc-brand">
-          <span className="kc-mark" aria-hidden="true" />
+          <span className="kc-mark"><SunMark size={18} stroke={1.9} color="#fff" /></span>
           <span className="kc-word">Soli</span>
         </Link>
         <Link href="/app?demo=1" className="kc-navcta">Start free</Link>
@@ -120,7 +121,8 @@ export default function CalculatorPage() {
 
 .kc-nav{max-width:1020px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:20px 22px}
 .kc-brand{display:flex;align-items:center;gap:11px}
-.kc-mark{width:34px;height:34px;border-radius:50%;background:var(--clay);display:block}
+.kc-mark{width:34px;height:34px;border-radius:50%;background:var(--clay);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex:none}
 .kc-word{font-family:var(--font-fraunces),serif;font-weight:600;font-size:24px;letter-spacing:-.5px}
 .kc-navcta{background:var(--ink);color:var(--bg)!important;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px}
 
