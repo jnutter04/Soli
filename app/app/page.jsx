@@ -16,7 +16,7 @@ import WorkLess from "@/components/WorkLess";
 import TaxPacket from "@/components/TaxPacket";
 import Dashboard from "@/components/Dashboard";
 import { CURRENCIES, curSymbol, setDisplayCurrency, money, money2, round2, fmtDate } from "@/lib/format";
-import { SOURCES, srcLabel, profitOf, rebookSms, boothHourly } from "@/lib/service";
+import { SOURCES, srcLabel, profitOf, rebookSms, boothHourly, newLog } from "@/lib/service";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -412,11 +412,14 @@ function SoliApp() {
         }
         if (!touched[cid] || new Date(r.date) > new Date(touched[cid])) touched[cid] = r.date;
       }
-      return {
+      /* date is the historical appointment, createdAt is this import. Both
+         matter: a backfill on day two is a very different signal from a year
+         of services genuinely logged one at a time. */
+      return newLog({
         id: uid(), clientId: cid, service: r.service, price: r.price,
         durationMin: r.durationMin, tip: r.tip, paySource: r.paySource,
         productCost: 0, date: r.date, imported: true,
-      };
+      });
     });
 
     const merged = [...clients, ...newClients].map((c) => {
@@ -943,9 +946,9 @@ function LogService({ clients, products, saveClients, logs, saveLogs, rent, taxR
     const usedQty = {};
     Object.keys(qty).forEach((pid) => { const n = Number(qty[pid]); if (n > 0) usedQty[pid] = n; });
 
-    saveLogs([{ id: uid(), clientId: cid, service: service.trim(), price: priceN, durationMin: durN,
+    saveLogs([newLog({ id: uid(), clientId: cid, service: service.trim(), price: priceN, durationMin: durN,
       paySource, tip: tipN, productCost: Math.round(productCost * 100) / 100,
-      qty: Object.keys(usedQty).length ? usedQty : undefined, date: at }, ...logs]);
+      qty: Object.keys(usedQty).length ? usedQty : undefined, date: at }), ...logs]);
     setSaved(true); setService(""); setPrice(""); setDur(""); setTip(""); setQty({}); setNewClient(""); setPaySource("card");
     // Keep the client and date so another service from the same appointment can
     // be added without re-entering who it was for, then reset once done.
@@ -1196,11 +1199,11 @@ function BatchDay({ clients, saveClients, logs, saveLogs, templates, products, r
       } else if (cid) {
         nextClients = nextClients.map((c) => (c.id === cid ? { ...c, lastVisit: now } : c));
       }
-      return {
+      return newLog({
         id: uid(), clientId: cid, service: r.service.trim(), price: Number(r.price),
         durationMin: Number(r.dur), paySource: r.paySource, tip: Number(r.tip) || 0,
         productCost: Math.round((r.productCost || 0) * 100) / 100, date: now,
-      };
+      });
     });
     saveClients(nextClients);
     saveLogs([...newLogs, ...logs]);
