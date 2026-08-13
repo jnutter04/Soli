@@ -75,8 +75,9 @@ export default function Landing() {
           </p>
           <div className="lp-cta-row">
             <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
+            <Link href="/calculator" className="lp-cta-alt">Try the free calculator</Link>
           </div>
-          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away. Or <Link href="/calculator" className="lp-inline">work out one appointment first</Link>, no account needed.</p>
+          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away, or work out one appointment first with no account at all.</p>
           {/* Shorter than it reads elsewhere on purpose. At full length these
               wrapped two and one on a phone, leaving the last reassurance
               stranded on its own line right at the fold. */}
@@ -246,7 +247,9 @@ function LandingStyles() {
 .lp-navcta:hover{background:#000}
 .lp-navsignin{font-weight:600;color:var(--ink)}
 .lp-navcalc{font-weight:600}
-.lp-inline{color:var(--clay-d);font-weight:600;text-decoration:underline}
+.lp-cta-alt{font-weight:600;font-size:16px;padding:15px 22px;border-radius:13px;
+  border:1.5px solid var(--clay);background:transparent;color:var(--clay-d);transition:.15s}
+.lp-cta-alt:hover{background:rgba(188,107,76,.08)}
 @media(max-width:620px){
   .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin){display:none}
   .lp-navlinks{gap:16px;font-size:14px}
@@ -269,6 +272,8 @@ function LandingStyles() {
 .lp-lead{font-size:19px;color:var(--ink2);max-width:520px;margin:0 0 30px}
 .lp-lead strong{color:var(--ink)}
 .lp-cta-row{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:24px}
+@media(max-width:430px){.lp-cta-row{flex-direction:column;align-items:stretch}
+  .lp-cta,.lp-cta-alt{text-align:center}}
 .lp-cta{background:var(--clay);color:#fff;font-weight:600;font-size:16px;padding:15px 26px;border-radius:13px;box-shadow:0 8px 20px rgba(188,107,76,.30);transition:.15s}
 .lp-cta:hover{background:var(--clay-d);transform:translateY(-1px)}
 .lp-cta.light{background:#fff;color:var(--clay-d);box-shadow:0 8px 24px rgba(0,0,0,.18)}
