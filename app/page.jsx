@@ -65,7 +65,7 @@ export default function Landing() {
         </div>
         <nav className="lp-navlinks">
           <a href="#how">How it works</a>
-          <a href="#features">Features</a>
+          <Link href="/calculator" className="lp-navcalc">Free calculator</Link>
           {/* Signing in belongs to people who already have an account, so it
               sits here as a link rather than as a second button competing with
               the one action this page is for. */}
@@ -86,7 +86,7 @@ export default function Landing() {
           <div className="lp-cta-row">
             <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
           </div>
-          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away.</p>
+          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away. Or <Link href="/calculator" className="lp-inline">work out one appointment first</Link>, no account needed.</p>
           {/* Shorter than it reads elsewhere on purpose. At full length these
               wrapped two and one on a phone, leaving the last reassurance
               stranded on its own line right at the fold. */}
@@ -255,8 +255,10 @@ function LandingStyles() {
 .lp-navcta{background:var(--ink);color:var(--bg)!important;padding:9px 16px;border-radius:10px;font-weight:600;font-size:14px}
 .lp-navcta:hover{background:#000}
 .lp-navsignin{font-weight:600;color:var(--ink)}
+.lp-navcalc{font-weight:600}
+.lp-inline{color:var(--clay-d);font-weight:600;text-decoration:underline}
 @media(max-width:620px){
-  .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin){display:none}
+  .lp-navlinks a:not(.lp-navcta):not(.lp-navsignin):not(.lp-navcalc){display:none}
   .lp-navlinks{gap:16px;font-size:14px}
 }
 

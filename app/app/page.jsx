@@ -16,7 +16,7 @@ import WorkLess from "@/components/WorkLess";
 import TaxPacket from "@/components/TaxPacket";
 import Dashboard from "@/components/Dashboard";
 import { CURRENCIES, curSymbol, setDisplayCurrency, money, money2, round2, fmtDate } from "@/lib/format";
-import { SOURCES, srcLabel, profitOf, rebookSms } from "@/lib/service";
+import { SOURCES, srcLabel, profitOf, rebookSms, boothHourly } from "@/lib/service";
 import { createClient } from "@/lib/supabase/client";
 import { loadUserState, createUserState, saveField } from "@/lib/userState";
 
@@ -151,15 +151,6 @@ const STARTER_PRODUCTS = {
 
 /* Booth rent can be entered hourly / weekly / monthly. We convert everything to
    an hourly rate so profitOf (unchanged) keeps working the same way. */
-const boothHourly = (s) => {
-  const unit = s.boothRentUnit || "hour";
-  const amt = Number(s.boothRentAmount);
-  const hpw = Number(s.boothRentHoursPerWeek) || 0;
-  if (unit === "week" && amt > 0 && hpw > 0) return amt / hpw;
-  if (unit === "month" && amt > 0 && hpw > 0) return (amt * 12 / 52) / hpw;
-  if (unit === "hour" && s.boothRentAmount !== undefined && s.boothRentAmount !== "") return amt || 0;
-  return Number(s.boothRentHourly) || 0; // legacy accounts
-};
 
 /* Week helpers (weeks start Monday). */
 const weekStartMs = (d) => { const dt = new Date(d); dt.setHours(0, 0, 0, 0); dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); return dt.getTime(); };
