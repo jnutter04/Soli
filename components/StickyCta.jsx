@@ -56,7 +56,7 @@ export default function StickyCta() {
     <div className={"lp-sticky" + (show ? " on" : "")} aria-hidden={!show}>
       {/* Off the tab order while hidden, so keyboard users are not sent to a
           button sitting outside the screen. */}
-      <Link href="/app?demo=1" className="lp-sticky-btn" tabIndex={show ? 0 : -1}>
+      <Link href="/app" className="lp-sticky-btn" tabIndex={show ? 0 : -1}>
         Start free &rarr;
       </Link>
     </div>

@@ -150,7 +150,7 @@ export default function KeepCalculator() {
 
         <div className="kc-cta">
           <p>That was one appointment. Soli does this for every client, and shows you the month.</p>
-          <Link href="/app?demo=1" className="kc-btn">Start free &rarr;</Link>
+          <Link href="/app" className="kc-btn">Start free &rarr;</Link>
           <span className="kc-ctanote">No card required. Nothing you typed here was sent anywhere.</span>
         </div>
       </div>

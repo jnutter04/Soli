@@ -55,6 +55,7 @@ const FULL = {
   templates: [{ id: "t1", name: "Volume fill" }],
   onHideOnboarding: () => {},
   onMilestoneSeen: () => {},
+  onLoadSample: () => {},
 };
 
 const render = (props) => renderToStaticMarkup(createElement(Dashboard, props));
@@ -66,9 +67,27 @@ test("renders with a normal month of services", () => {
 });
 
 test("renders an empty account without throwing", () => {
-  // The state every new signup is in, and the one most likely to be skipped.
+  // The state every new signup is in, and now the first screen all of them see.
   const html = render({ ...FULL, logs: [], clients: [], templates: [], settings: {} });
   assert.match(html, /No services logged yet/);
+  assert.match(html, /Log your first service/);
+  // One action on this screen. The checklist repeated it and led with a detour
+  // into Settings, which is the last thing a brand new account needs.
+  assert.doesNotMatch(html, /Getting started/i);
+  /* One primary action. The sample data offer is also a button element, but a
+     quiet text link by styling, so count the ones that actually look like
+     the thing to press. */
+  assert.equal((html.match(/class="soli-cta/g) || []).length, 1, "exactly one primary call to action");
+});
+
+test("offers the sample data detour only while nothing would be lost", () => {
+  const untouched = { ...FULL, logs: [], clients: [], templates: [], settings: {} };
+  assert.match(render(untouched), /example numbers/, "an untouched account can look around");
+
+  // Loading examples overwrites settings and clients wholesale, so once either
+  // exists the offer has to disappear rather than quietly undo their setup.
+  assert.doesNotMatch(render({ ...untouched, clients: FULL.clients }), /example numbers/);
+  assert.doesNotMatch(render({ ...untouched, settings: { boothRentAmount: 300 } }), /example numbers/);
 });
 
 test("renders when booth rent and tax have never been set", () => {

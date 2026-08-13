@@ -67,7 +67,7 @@ export default function CalculatorPage() {
           <span className="kc-mark"><SunMark size={18} stroke={1.9} color="#fff" /></span>
           <span className="kc-word">Soli</span>
         </Link>
-        <Link href="/app?demo=1" className="kc-navcta">Start free</Link>
+        <Link href="/app" className="kc-navcta">Start free</Link>
       </header>
 
       <main className="kc-main">

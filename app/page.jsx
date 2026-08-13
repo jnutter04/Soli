@@ -60,7 +60,7 @@ export default function Landing() {
               sits here as a link rather than as a second button competing with
               the one action this page is for. */}
           <Link href="/login" className="lp-navsignin">Sign in</Link>
-          <Link href="/app?demo=1" className="lp-navcta">Start free</Link>
+          <Link href="/app" className="lp-navcta">Start free</Link>
         </nav>
       </header>
 
@@ -74,10 +74,10 @@ export default function Landing() {
             after product, booth rent and tax.
           </p>
           <div className="lp-cta-row">
-            <Link href="/app?demo=1" className="lp-cta">Start free →</Link>
+            <Link href="/app" className="lp-cta">Start free →</Link>
             <Link href="/calculator" className="lp-cta-alt">Try the free calculator</Link>
           </div>
-          <p className="lp-ctanote">Sign up in seconds and Soli loads example numbers so you can look around right away, or work out one appointment first with no account at all.</p>
+          <p className="lp-ctanote">Sign up in seconds and log your first service in about twenty. Or work out one appointment first with no account at all.</p>
           {/* Shorter than it reads elsewhere on purpose. At full length these
               wrapped two and one on a phone, leaving the last reassurance
               stranded on its own line right at the fold. */}
@@ -185,7 +185,7 @@ export default function Landing() {
           <span className="lp-logomark big"><SunMark size={26} stroke={1.8} color="#fff" /></span>
           <h2 className="lp-h2 center light">See what you actually keep.</h2>
           <p className="lp-final-p">Free to start. Nothing to install. Your first real number is 20 seconds away.</p>
-          <Link href="/app?demo=1" className="lp-cta light">Start free →</Link>
+          <Link href="/app" className="lp-cta light">Start free →</Link>
         </div>
       </section>
 
@@ -197,7 +197,7 @@ export default function Landing() {
         <span className="lp-foot-tag">Know what you actually keep.</span>
         <Link href="/privacy" className="lp-foot-link">Privacy</Link>
         <Link href="/terms" className="lp-foot-link">Terms</Link>
-        <Link href="/app?demo=1" className="lp-foot-link">Start free →</Link>
+        <Link href="/app" className="lp-foot-link">Start free →</Link>
       </footer>
     </div>
   );

@@ -18,7 +18,7 @@ import { shouldOfferShare } from "@/lib/milestones";
 import { money, money2, round2, fmtDate } from "@/lib/format";
 import { SOURCES, profitOf, rebookSms } from "@/lib/service";
 
-export default function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan, settings = {}, templates = [], onHideOnboarding, onMilestoneSeen }) {
+export default function Dashboard({ logs, clients, rent, taxRate, setTab, buckets = [], plan = {}, savePlan, settings = {}, templates = [], onHideOnboarding, onMilestoneSeen, onLoadSample }) {
   const t = taxRate / 100;
   const now = Date.now();
   const [range, setRange] = useState("30d");
@@ -150,16 +150,47 @@ export default function Dashboard({ logs, clients, rent, taxRate, setTab, bucket
       <div className="soli-page">
         <h1 className="soli-h1">Welcome to Soli</h1>
         <p className="soli-sub">Your numbers will appear here as soon as you start logging your own work.</p>
-        {!settings.hideOnboarding && (
-          <GettingStarted settings={settings} templates={templates} logs={logs} setTab={setTab} onDismiss={onHideOnboarding} />
-        )}
+        {/* The checklist does not belong on this screen.
+
+            It repeated "Log your first service" directly above the button that
+            does it, and led with "Set your booth rent" pointing at Settings,
+            which sends somebody who has just signed up to go and configure
+            things before Soli has shown them anything at all. Four out of five
+            accounts never log a service, and a first screen whose top item is a
+            detour into Settings is a plausible reason why.
+
+            One screen, one action. The checklist returns on the populated
+            dashboard, where booth rent is the natural next thing and a figure
+            already on screen is waiting to be corrected by it. */}
         <div className="soli-empty">
           <span className="soli-emptymark"><Sun size={26} strokeWidth={1.8} /></span>
           <h2>No services logged yet</h2>
-          <p>Log your first service and Soli shows what you actually keep, after product, booth rent &amp; tax. Everything here is built from your own numbers.</p>
+          <p>It takes about twenty seconds. Soli then shows what you actually keep, after product, booth rent &amp; tax, worked out only from your own numbers.</p>
           <button className="soli-cta" onClick={() => setTab("log")}><PlusCircle size={18} /> Log your first service</button>
         </div>
-        <p className="soli-emptyhint">Just exploring? You can load a sample data set from <b>Settings</b> to see how it all works, then clear it anytime.</p>
+        {/* Sample data is a deliberate detour now, not the way in. Eight accounts
+            arrived pre-seeded and not one of them ever logged a service of their
+            own, against 29% of the accounts that started empty. A finished
+            looking dashboard full of a stranger's clients leaves nothing obvious
+            to do, and the one action that matters competes with a screen that
+            already looks complete. It stays for people who genuinely want a look
+            around first, one step off the main path and clearly labelled as
+            somebody else's numbers. */}
+        {/* Only while there is nothing to lose. Loading the examples replaces
+            settings, clients and products wholesale, so somebody who has already
+            set their booth rent or added a client would have that quietly
+            overwritten by what looks like a harmless look around. Offering it
+            only to untouched accounts is safer than asking them to confirm, and
+            a reset is not a thing to put in front of someone who has started. */}
+        {clients.length === 0 && !settings.boothRentAmount && (
+          <p className="soli-emptyhint">
+            Rather look around first?{" "}
+            <button type="button" className="soli-linkbtn" onClick={onLoadSample}>
+              Fill Soli with example numbers
+            </button>{" "}
+            to see how it works. They are not your figures, and you can clear them whenever you like.
+          </p>
+        )}
       </div>
     );
   }

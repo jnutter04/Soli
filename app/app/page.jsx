@@ -734,7 +734,7 @@ function SoliApp() {
         )}
         {tab === "dash" && <Dashboard logs={logs} clients={clients} rent={rent} taxRate={taxRate} setTab={setTab} buckets={settings.buckets || []} plan={plan} savePlan={savePlan}
           settings={settings} templates={settings.templates || []} onHideOnboarding={() => saveSettings({ ...settings, hideOnboarding: true })}
-          onMilestoneSeen={(key) => saveSettings({ ...settings, sharePromptedFor: key })} />}
+          onMilestoneSeen={(key) => saveSettings({ ...settings, sharePromptedFor: key })} onLoadSample={loadSample} />}
         {tab === "week" && <WeeklyView logs={logs} rent={rent} taxRate={taxRate} />}
         {tab === "log" && <LogService clients={clients} products={products} saveClients={saveClients}
           logs={logs} saveLogs={saveLogs} rent={rent} taxRate={taxRate}
