@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import RefCapture from "@/components/RefCapture";
 
@@ -16,12 +16,37 @@ function SunMark({ size = 20, stroke = 1.8, color }) {
 }
 
 export default function LoginPage() {
-  const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
+  /* Signing up is the default, because that is who arrives.
+
+     "Start free" on the landing page lands here, and this screen used to open
+     on "Welcome back" with a password box for an account the visitor does not
+     have. Roughly ninety people clicked that button in a month and about
+     twenty ended up with an account. Creating one has to be the thing already
+     on screen, not a line of small text underneath.
+
+     Anyone who has signed in on this device before gets the other screen. That
+     check reads localStorage, which cannot run during a server render, so it
+     lands a moment after first paint; only returning users see the change and
+     they are much the rarer case here. */
+  const [mode, setMode] = useState("signup"); // "signin" | "signup" | "forgot"
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("soli-returning") === "1") setMode("signin");
+    } catch { /* private mode blocks storage; signup is the safer default */ }
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  /* Remembered so this screen opens on sign in next time. Set on the way out
+     rather than on arrival, because the only thing worth remembering is that
+     an account now exists on this device. */
+  const rememberReturning = () => {
+    try { localStorage.setItem("soli-returning", "1"); } catch { /* private mode */ }
+  };
 
   const signInWithGoogle = async () => {
     setError(""); setNotice(""); setBusy(true);
@@ -33,6 +58,7 @@ export default function LoginPage() {
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) { setError(error.message); setBusy(false); }
+    else rememberReturning();
     // on success the browser is redirected to Google
   };
 
@@ -78,9 +104,21 @@ export default function LoginPage() {
       // Only allow internal paths, and use a full navigation so the freshly-set
       // session cookie is always present when /app loads (avoids a bounce).
       const next = rawNext.startsWith("/") ? rawNext : "/app";
+      rememberReturning();
       window.location.assign(next);
     } catch (err) {
-      setError(err?.message || "Something went wrong. Please try again.");
+      const msg = err?.message || "Something went wrong. Please try again.";
+      /* The real risk of opening on the signup form: somebody who already has
+         an account, on a device that has forgotten them, tries to make a second
+         one. Rather than showing them a raw error, put them on the screen they
+         actually wanted with their email already filled in. */
+      if (mode === "signup" && /already|exists|registered/i.test(msg)) {
+        setMode("signin");
+        setNotice("You already have an account with that email. Enter your password to sign in.");
+        setBusy(false);
+        return;
+      }
+      setError(msg);
       setBusy(false);
     }
   };
